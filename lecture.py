@@ -12,19 +12,11 @@ duckdb.execute("CREATE OR REPLACE SECRET (TYPE S3, KEY_ID '', SECRET '', ENDPOIN
 
 def read_data(ligne, date):
     """Lire la table de donnees d'une ligne a une date"""
-    url = f"https://minio.lab.sspcloud.fr/gpichonlegroux/rer-{ligne}/date%3D{date}/part-0.parquet"
-    return duckdb.sql(f"SELECT * FROM '{url}'").df()
+    return duckdb.sql(f"SELECT * FROM 's3://gpichonlegroux/rer-{ligne}/date={date}/part-0.parquet'").df()
 
 def read_data_ligne(ligne):
     """Lire l'integralite des donnees d'une ligne sur toutes les dates"""
     return duckdb.sql(f"SELECT * FROM 's3://gpichonlegroux/rer-{ligne}/date=*/*.parquet' ORDER BY date DESC").df()
-
-def save_data(ligne):
-    """Sauvegarder un dataset localement pour eviter de requeter le serveur a chaque fois"""
-    df = read_data_ligne(ligne)
-    df.to_parquet(f"data/donnees_rer_{ligne}.parquet", index=False)
-
-    from datetime import datetime
 
 def save_data(ligne):
     """Sauvegarder un dataset localement avec la date du jour pour éviter de requeter le serveur a chaque fois"""
