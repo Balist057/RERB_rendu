@@ -1,20 +1,16 @@
 import duckdb
 
-# Test
-url = "https://minio.lab.sspcloud.fr/gpichonlegroux/rer-b/date%3D2026-10-09/part-0.parquet"
-df = duckdb.sql(f"SELECT * FROM '{url}'").df()
+duckdb.execute("CREATE OR REPLACE SECRET (TYPE S3, KEY_ID '', SECRET '', ENDPOINT 'minio.lab.sspcloud.fr', URL_STYLE 'path');")
+
 
 def read_data(ligne, date):
     """Lire la table de donnees d'une ligne a une date"""
-    url = "https://minio.lab.sspcloud.fr/gpichonlegroux/rer-" + ligne + "/date%3D" + date + "/part-0.parquet"
-    df = duckdb.sql(f"SELECT * FROM '{url}'").df()
-    return df
+    url = f"https://minio.lab.sspcloud.fr/gpichonlegroux/rer-{ligne}/date%3D{date}/part-0.parquet"
+    return duckdb.sql(f"SELECT * FROM '{url}'").df()
+
 
 def read_data_ligne(ligne):
-    # TODO : corriger
-    query = f"""
-    SELECT *
-    FROM read_parquet('https://datalab.sspcloud.fr/s3/gpichonlegroux/rer-{ligne}/**/*.parquet', hive_partitioning = true)
-    ORDER BY date DESC;
-    """
-    return duckdb.sql(query).df()
+    """Lire l'integralite des donnees d'une ligne sur toutes les dates"""
+    return duckdb.sql(f"SELECT * FROM 's3://gpichonlegroux/rer-{ligne}/date=*/*.parquet' ORDER BY date DESC").df()
+
+print(read_data_ligne("b"))
