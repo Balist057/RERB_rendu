@@ -26,3 +26,8 @@ def save_data(ligne):
     
     df.to_parquet(file_path, index=False)
     print(f"Données sauvegardées : {file_path}")
+
+df = pd.read_parquet("data/rer_b_2026-10-16.parquet")
+print(df.head())
+print(df.shape)
+print(df.dtypes)
