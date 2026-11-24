@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Collecteur PRIM (secrets et partitions locales)
+api_prim.txt
+bot_collect/data/rer-*/
+bot_collect/data/incidents/

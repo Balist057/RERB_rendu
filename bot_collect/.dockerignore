@@ -1,0 +1,9 @@
+.git
+__pycache__
+*.pyc
+api_prim.txt
+.env
+data/rer-*/
+data/incidents/
+*.parquet
+*.log

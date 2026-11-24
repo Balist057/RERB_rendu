@@ -1,0 +1,75 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rer-b-collector
+  labels:
+    app: rer-b-collector
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: rer-b-collector
+  template:
+    metadata:
+      labels:
+        app: rer-b-collector
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values:
+                      - boss13
+
+      containers:
+        - name: collector
+          image: ghcr.io/balist057/rerbcollect:latest
+          imagePullPolicy: Always
+          args: ["--interval", "120"]
+
+          env:
+            - name: PRIM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: collector-secrets
+                  key: PRIM_API_KEY
+            - name: PRIM_API_KEY_2
+              valueFrom:
+                secretKeyRef:
+                  name: collector-secrets
+                  key: PRIM_API_KEY_2
+                  optional: true
+            - name: AWS_S3_ENDPOINT
+              value: "https://minio.lab.sspcloud.fr"
+            - name: S3_BUCKET
+              value: "gpichonlegroux"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: collector-secrets
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: collector-secrets
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: AWS_SESSION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: collector-secrets
+                  key: AWS_SESSION_TOKEN
+                  optional: true
+
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
