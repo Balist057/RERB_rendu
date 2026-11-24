@@ -1,5 +1,3 @@
-# Build et push l'image Docker automatiquement via GitHub Actions.
-
 name: Build & Push Docker Image
 
 on:

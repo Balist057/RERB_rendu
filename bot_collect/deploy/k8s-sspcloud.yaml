@@ -25,7 +25,7 @@ spec:
                   - key: kubernetes.io/hostname
                     operator: NotIn
                     values:
-                      - boss13
+                      - boss13 #cassé donc on le refuse
 
       containers:
         - name: collector
