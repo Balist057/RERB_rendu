@@ -35,6 +35,16 @@ def save_data(ligne):
     df.to_parquet(file_path, index=False)
     print(f"Données sauvegardées : {file_path}")
 
+def save_all():
+    """Sauvegarder les 3 lignes et les incidents dans data/"""
+    for ligne in ("a", "b", "d"):
+        save_data(ligne)
+    df_inc = read_incidents()
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    file_path = f"data/incidents_{today}.parquet"
+    df_inc.to_parquet(file_path, index=False)
+    print(f"Données sauvegardées : {file_path}")
+
 def conversion(df):
     """Exploser stops, convertir les horaires en Europe/Paris et trier les arrets dans l'ordre chronologique"""
     df = df.copy()
