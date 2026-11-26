@@ -30,7 +30,7 @@ def save_data(ligne):
     """Sauvegarder un dataset localement avec la date du jour pour éviter de requeter le serveur a chaque fois"""
     df = read_data_ligne(ligne)
     today = datetime.datetime.now().strftime("%Y-%m-%d")
-    file_path = f"data/rer_{ligne}_{today}.parquet"
+    file_path = f"data/raw/rer_{ligne}_{today}.parquet"
     
     df.to_parquet(file_path, index=False)
     print(f"Données sauvegardées : {file_path}")
@@ -41,7 +41,7 @@ def save_all():
         save_data(ligne)
     df_inc = read_incidents()
     today = datetime.datetime.now().strftime("%Y-%m-%d")
-    file_path = f"data/incidents_{today}.parquet"
+    file_path = f"data/raw/incidents_{today}.parquet"
     df_inc.to_parquet(file_path, index=False)
     print(f"Données sauvegardées : {file_path}")
 

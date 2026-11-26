@@ -4,9 +4,12 @@ import duckdb
 import pandas as pd
 
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 DATE_DEBUT = "2026-10-02"
 DATE_FIN = "2026-11-23"
+
+BASE_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+RAW_DIR = BASE_DATA_DIR / "raw"
+PROCESSED_DIR = BASE_DATA_DIR / "processed"
 
 GARES_CENTRALES = {
     "a": [
@@ -40,10 +43,10 @@ GARES_CENTRALES = {
 }
 
 FICHIERS_BRUTS = {
-    "a": DATA_DIR / "rer_a_2026-11-24.parquet",
-    "b": DATA_DIR / "rer_b_2026-11-24.parquet",
-    "d": DATA_DIR / "rer_d_2026-11-24.parquet",
-    "incidents": DATA_DIR / "incidents_2026-11-24.parquet",
+    "a": RAW_DIR / "rer_a_2026-11-24.parquet",
+    "b": RAW_DIR / "rer_b_2026-11-24.parquet",
+    "d": RAW_DIR / "rer_d_2026-11-24.parquet",
+    "incidents": RAW_DIR / "incidents_2026-11-24.parquet",
 }
 
 
@@ -150,14 +153,14 @@ def preparer_donnees(source="local", sauvegarder=True):
         df = charger_ligne(con, ligne, source=source)
         df = ajout_variables(df)
         if sauvegarder:
-            df.to_parquet(DATA_DIR / f"clean_rer_{ligne}_{today}.parquet", index=False)
+            df.to_parquet(PROCESSED_DIR / f"clean_rer_{ligne}_{today}.parquet", index=False)
         resultats[ligne] = df
 
     df_incidents = charger_incidents(con, source=source)
     con.close()
 
     if sauvegarder:
-        df_incidents.to_parquet(DATA_DIR / f"clean_incidents_{today}.parquet", index=False)
+        df_incidents.to_parquet(PROCESSED_DIR / f"clean_incidents_{today}.parquet", index=False)
 
     return resultats["a"], resultats["b"], resultats["d"], df_incidents
 
@@ -166,7 +169,7 @@ def charger_donnees_propres(source="local"):
     """Lire les Parquet nettoyés les plus récents (ou les générer depuis local/S3)."""
     prefixes = ("clean_rer_a", "clean_rer_b", "clean_rer_d", "clean_incidents")
     if source == "local":
-        fichiers = [sorted(DATA_DIR.glob(f"{prefix}_*.parquet")) for prefix in prefixes]
+        fichiers = [sorted(PROCESSED_DIR.glob(f"{prefix}_*.parquet")) for prefix in prefixes]
         if all(fichiers):
             return tuple(pd.read_parquet(f[-1]) for f in fichiers)
     return preparer_donnees(source=source, sauvegarder=True)
