@@ -19,9 +19,9 @@ TRANCHES = ["Pointe matin", "Heures creuses", "Pointe soir", "Soirée", "Week-en
 
 def charger():
     """Tous les arrêts, et les arrêts non supprimés. On ne prend pas en compte les arrêts supprimés, puisqu'ils se voient accorder un retard de 0 dans les données."""
-    fichiers = [sorted(DATA.glob(f"clean_rer_{l}_*.parquet")) for l in "abd"]
-    if all(fichiers):
-        df = pd.concat([pd.read_parquet(f[-1]) for f in fichiers], ignore_index=True)
+    fichiers = [DATA / f"clean_rer_{l}.parquet" for l in "abd"]
+    if all(f.exists() for f in fichiers):
+        df = pd.concat([pd.read_parquet(f) for f in fichiers], ignore_index=True)
     else:  # fichiers absents : on les régénère
         try:
             from src.nettoyage import charger_donnees_propres
