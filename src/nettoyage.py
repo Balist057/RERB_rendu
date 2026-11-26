@@ -48,24 +48,30 @@ FICHIERS_BRUTS = {
 }
 
 
-def charger_ligne(con, ligne, source="local"):
-    """Extraire les arrêts du tronçon central d'une ligne en local ou depuis S3."""
+def charger_ligne(con, ligne, source="local", toutes_gares=False, date_jour=None):
+    """Extraire les arrêts d'une ligne en local ou depuis S3 (tronçon central ou toutes gares)."""
     if source not in ("local", "s3"):
         raise ValueError("source doit valoir 'local' ou 's3'")
 
-    gares = GARES_CENTRALES[ligne]
     if source == "local":
         chemin = str(FICHIERS_BRUTS[ligne])
     else:
         init_s3(con)
-        chemin = f"s3://gpichonlegroux/rer-{ligne}/date=*/*.parquet"
+        if date_jour:
+            chemin = f"s3://gpichonlegroux/rer-{ligne}/date={date_jour}/part-0.parquet"
+        else:
+            chemin = f"s3://gpichonlegroux/rer-{ligne}/date=*/*.parquet"
 
-    query = """
+    filtre_date = "WHERE CAST(date AS DATE) = CAST(? AS DATE)" if date_jour else "WHERE date >= ?"
+    filtre_gares = "" if toutes_gares else "WHERE list_contains(?, stop_name)"
+    params = [chemin, date_jour or DATE_DEBUT] if toutes_gares else [chemin, date_jour or DATE_DEBUT, GARES_CENTRALES[ligne]]
+
+    query = f"""
     WITH base AS (
         SELECT * EXCLUDE (stops),
-               UNNEST(from_json(stops, '[{"n":"VARCHAR","ad":"TIMESTAMPTZ","ed":"TIMESTAMPTZ","dt":"BIGINT","v":"VARCHAR","s":"VARCHAR"}]')) AS stop
-        FROM read_parquet(?, union_by_name=true)
-        WHERE date >= ?
+               UNNEST(from_json(stops, '[{{"n":"VARCHAR","ad":"TIMESTAMPTZ","ed":"TIMESTAMPTZ","dt":"BIGINT","v":"VARCHAR","s":"VARCHAR"}}]')) AS stop
+        FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+        {filtre_date}
     ),
     ord AS (
         SELECT * EXCLUDE (stop),
@@ -80,10 +86,10 @@ def charger_ligne(con, ligne, source="local"):
         FROM base
     )
     SELECT * FROM ord
-    WHERE list_contains(?, stop_name)
+    {filtre_gares}
     ORDER BY date, journey_id, aimed_time
     """
-    df = con.execute(query, [chemin, DATE_DEBUT, gares]).df()
+    df = con.execute(query, params).df()
     df["line"] = df["line"].fillna(f"rer_{ligne}")
     df["aimed_time"] = df["aimed_time"].dt.tz_convert("Europe/Paris")
     df["expected_time"] = df["expected_time"].dt.tz_convert("Europe/Paris")
@@ -167,3 +173,15 @@ def charger_donnees_propres(source="local", maj=False):
     if source == "local" and not maj and all(f.exists() for f in fichiers):
         return tuple(pd.read_parquet(f) for f in fichiers)
     return preparer_donnees(source=source, sauvegarder=True, maj=maj)
+
+
+def charger_jour_complet(date_jour, source="local"):
+    """Charger toutes les gares des 3 lignes sur une journée donnée (pour visualiser un incident)."""
+    jour = pd.Timestamp(date_jour).strftime("%Y-%m-%d")
+    if source == "local" and not all(FICHIERS_BRUTS[l].exists() for l in ("a", "b", "d")):
+        source = "s3"
+
+    con = duckdb.connect()
+    dfs = [ajout_variables(charger_ligne(con, l, source=source, toutes_gares=True, date_jour=jour)) for l in ("a", "b", "d")]
+    con.close()
+    return pd.concat(dfs, ignore_index=True)
