@@ -5,9 +5,6 @@ data/processed/*
 !data/processed/.gitkeep
 
 # Docs et figures
-docs/*
-!docs/.gitkeep
-!docs/figures/
 docs/figures/*
 !docs/figures/.gitkeep
 
