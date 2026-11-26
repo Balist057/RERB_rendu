@@ -3,7 +3,7 @@
 # sont-ils plus élevés que ceux du RER A (référence : très fréquenté, mais sans voies partagées) ?
 # Dans cette partie, nous réalisons un simple constat naïf avec des calculs et graphiques simples qui donnent une idée du résultat.
 # Données : un arrêt d'un train dans une gare du tronçon central (à partir du 02/10/2026).
-# tableau récapitulatif + graphiques dans docs/figures/
+# tableau récapitulatif + graphiques dans docs/figures/ (fichiers axe1_*)
 ######################################################################################################################################
 
 from pathlib import Path
@@ -57,39 +57,39 @@ if __name__ == "__main__":
     r = df.groupby("line")["retard_min"]
     retards = pd.DataFrame({"Moyenne": r.mean(), "Médiane": r.median(),
                             "P90": r.quantile(0.9), "P95": r.quantile(0.95)})
-    graphique(retards, "Retards sur le tronçon central", "Retard (min)", "1_retards")
+    graphique(retards, "Retards sur le tronçon central", "Retard (min)", "axe1_1_retards")
     # Contrôle à Châtelet, seule gare commune aux 3 lignes
     chatelet = df[df["stop_name"] == "Châtelet-Les Halles"].groupby("line")["retard_min"].mean()
 
     # 2. Retard ajouté à chaque arrêt (s), dans le tunnel ou ailleurs
     tunnel = df.groupby(["line", "zone_tunnel"])["delay_added_sec"].mean().unstack()
     tunnel.columns = ["Hors tunnel", "Dans le tunnel"]
-    graphique(tunnel, "Retard ajouté par arrêt", "Secondes", "2_tunnel")
+    graphique(tunnel, "Retard ajouté par arrêt", "Secondes", "axe1_2_tunnel")
 
     # Dans le tunnel : vers le Nord on sort à Gare du Nord, vers le Sud à Châtelet (B et D seulement)
     bd = df[df["zone_tunnel"] & (df["stop_order"] > 1) & df["direction"].isin(["Nord", "Sud"])]
     sortie = ((bd["direction"] == "Nord") & (bd["stop_name"] == "Gare du Nord")) | \
              ((bd["direction"] == "Sud") & (bd["stop_name"] == "Châtelet-Les Halles"))
     sens = bd.groupby(["line", sortie.map({False: "Entrée", True: "Sortie"})])["delay_added_sec"].mean().unstack()
-    graphique(sens, "Retard ajouté à l'entrée et à la sortie du tunnel", "Secondes", "5_sens_tunnel")
+    graphique(sens, "Retard ajouté à l'entrée et à la sortie du tunnel", "Secondes", "axe1_5_sens_tunnel")
 
     # 3. Retard moyen (min) selon le moment de la journée, et hausse en pointe (semaine)
     tranches = df.groupby(["line", "tranche_horaire"])["retard_min"].mean().unstack()[TRANCHES]
-    graphique(tranches, "Retard moyen selon le moment de la journée", "Retard (min)", "3_tranches")
+    graphique(tranches, "Retard moyen selon le moment de la journée", "Retard (min)", "axe1_3_tranches")
     hausse_pointe = df[df["heure_pointe"]].groupby("line")["retard_min"].mean() - tranches["Heures creuses"]
 
     # 4. Trains (%) dont tous les arrêts sont annulés (supprimés) ou une partie (limités)
     annule = df_all.groupby(["line", "date", "journey_id"])["est_supprime"].mean()
     suppr = pd.DataFrame({"Supprimés": (annule == 1).groupby("line").mean() * 100,
                           "Limités": ((annule > 0) & (annule < 1)).groupby("line").mean() * 100})
-    graphique(suppr, "Trains supprimés ou limités", "% des trains", "4_suppressions")
+    graphique(suppr, "Trains supprimés ou limités", "% des trains", "axe1_4_suppressions")
 
     # 5. Retard moyen par jour : l'écart vient-il de quelques journées exceptionnelles ?
     par_jour = df.groupby(["date", "line"])["retard_min"].mean().unstack()
     ax = par_jour.rename(columns=LIGNES).rename_axis(columns=None).plot(figsize=(10, 4.5), color=list(COULEURS.values()),
                                               title="Retard moyen par jour", ylabel="Retard (min)", xlabel="")
     ax.axhline(5, color="grey", linestyle="--")  # seuil choisi des "mauvais jours"
-    plt.savefig(FIGURES / "6_retard_par_jour.png", dpi=150)
+    plt.savefig(FIGURES / "axe1_6_retard_par_jour.png", dpi=150)
 
     recap = pd.DataFrame({
         "Retard moyen (min)": retards["Moyenne"],
@@ -117,7 +117,7 @@ if __name__ == "__main__":
     ]
     print(recap.to_string())
 
-    # Tableau récapitulatif disponible dans docs/figures/7_recap
+    # Tableau récapitulatif disponible dans docs/figures/axe1_7_recap
     fig, ax = plt.subplots(figsize=(14, 4.5))
     ax.axis("off")
     table = ax.table(cellText=recap.values, rowLabels=recap.index, colLabels=recap.columns,
@@ -127,5 +127,5 @@ if __name__ == "__main__":
     table.scale(1, 1.6)                                          
     table.auto_set_column_width(range(-1, recap.shape[1]))       
     ax.set_title("Axe 1 : tableau récapitulatif", fontweight="bold")
-    fig.savefig(FIGURES / "7_recap.png", dpi=150, bbox_inches="tight")
+    fig.savefig(FIGURES / "axe1_7_recap.png", dpi=150, bbox_inches="tight")
     plt.show()
