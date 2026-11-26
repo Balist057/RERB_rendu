@@ -13,12 +13,12 @@ import pandas as pd
 DATA = Path(__file__).resolve().parent.parent / "data" / "processed"
 FIGURES = Path(__file__).resolve().parent.parent / "docs" / "figures"
 LIGNES = {"rer_a": "RER A", "rer_b": "RER B", "rer_d": "RER D"}
-COULEURS = {"rer_a": "#E3051C", "rer_b": "#3F7DD0", "rer_d": "#00A88F"}
-TRANCHES = ["Pointe matin", "Heures creuses", "Pointe soir", "Soirée", "Week-end"]
+COULEURS = {"rer_a": "#E3051C", "rer_b": "#3F7DD0", "rer_d": "#00A88F"} #Les couleurs choises pour la représentation sont proches des originales
+TRANCHES = ["Pointe matin", "Heures creuses", "Pointe soir", "Soirée", "Week-end"] #On étudie l'impact des tranches horraires sur le retard des RER
 
 
 def charger():
-    """Tous les arrêts, et les arrêts non supprimés (IDFM leur met 0 de retard, ce qui fausserait les moyennes)."""
+    """Tous les arrêts, et les arrêts non supprimés. On ne prend pas en compte les arrêts supprimés, puisqu'ils se voient accorder un retard de 0 dans les données."""
     fichiers = [sorted(DATA.glob(f"clean_rer_{l}_*.parquet")) for l in "abd"]
     if all(fichiers):
         df = pd.concat([pd.read_parquet(f[-1]) for f in fichiers], ignore_index=True)
@@ -116,4 +116,16 @@ if __name__ == "__main__":
         "B et D sont bien plus souvent retournés avant le tunnel",
     ]
     print(recap.to_string())
+
+    # Tableau récapitulatif enregistré comme figure
+    fig, ax = plt.subplots(figsize=(14, 4.5))
+    ax.axis("off")
+    table = ax.table(cellText=recap.values, rowLabels=recap.index, colLabels=recap.columns,
+                     loc="center", cellLoc="center", rowLoc="left")
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1, 1.6)                                          # lignes plus hautes, plus lisibles
+    table.auto_set_column_width(range(-1, recap.shape[1]))       # largeur adaptée au texte (-1 = intitulés)
+    ax.set_title("Axe 1 : tableau récapitulatif", fontweight="bold")
+    fig.savefig(FIGURES / "7_recap.png", dpi=150, bbox_inches="tight")
     plt.show()
