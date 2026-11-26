@@ -117,15 +117,15 @@ if __name__ == "__main__":
     ]
     print(recap.to_string())
 
-    # Tableau récapitulatif enregistré comme figure
+    # Tableau récapitulatif disponible dans docs/figures/7_recap
     fig, ax = plt.subplots(figsize=(14, 4.5))
     ax.axis("off")
     table = ax.table(cellText=recap.values, rowLabels=recap.index, colLabels=recap.columns,
                      loc="center", cellLoc="center", rowLoc="left")
     table.auto_set_font_size(False)
     table.set_fontsize(10)
-    table.scale(1, 1.6)                                          # lignes plus hautes, plus lisibles
-    table.auto_set_column_width(range(-1, recap.shape[1]))       # largeur adaptée au texte (-1 = intitulés)
+    table.scale(1, 1.6)                                          
+    table.auto_set_column_width(range(-1, recap.shape[1]))       
     ax.set_title("Axe 1 : tableau récapitulatif", fontweight="bold")
     fig.savefig(FIGURES / "7_recap.png", dpi=150, bbox_inches="tight")
     plt.show()
