@@ -33,3 +33,5 @@ L'ensemble des résultats (statistiques descriptives, contagion, résilience) et
   - regrouper les résultats d'analyse et la méthodologie directement dans l'application Streamlit (en remplacement de `rapport.ipynb`) ;
   - construire une carte interactive (carte géographique de Paris + schéma topologique en « H » couché avec le RER A séparé) permettant de rejouer les incidents passés minute par minute, complétée par un diagramme de Marey et les messages d'incidents.
 - **Finalisation du dépôt** : remplir `requirements.txt`, supprimer les fichiers temporaires (`nettoyage/nettoyage_explo.ipynb`, `exploration.py`, `init.ipynb`, `rapport.ipynb`) et préparer les slides dans `soutenance/`.
+
+Rscript -e "tinytex::pdflatex('mon_fichier.tex')" pour compiler le fichier .tex (avec R ds le PATH)
