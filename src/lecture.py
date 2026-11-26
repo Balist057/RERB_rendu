@@ -1,76 +1,80 @@
 from pathlib import Path
 import duckdb
 import pandas as pd
-import datetime
-import json
+
 
 RAW_DIR = Path(__file__).resolve().parent.parent / "data" / "raw"
+DATE_DEBUT = "2026-10-02"
+SOURCES = {
+    "rer_a": "rer-a",
+    "rer_b": "rer-b",
+    "rer_d": "rer-d",
+    "incidents": "incidents",
+}
 
-"""
-TYPE S3: Indique que le secret s'applique au protocole s3://
-KEY_ID '' et SECRET '': Identifiant vide car l'accès est anonyme (public)
-ENDPOINT 'minio.lab.sspcloud.fr': Redirige les requêtes du S3 officiel AWS vers le MinIO du SSP Cloud
-URL_STYLE 'path': Force l'utilisation d'une structure d'URL par chemin (http://endpoint/bucket)
-"""
-duckdb.execute("INSTALL httpfs; LOAD httpfs;")
-duckdb.execute("CREATE OR REPLACE SECRET (TYPE S3, KEY_ID '', SECRET '', ENDPOINT 'minio.lab.sspcloud.fr', URL_STYLE 'path');")
 
-def read_data(ligne, date):
-    """Lire la table de donnees d'une ligne a une date"""
-    return duckdb.sql(f"SELECT * FROM 's3://gpichonlegroux/rer-{ligne}/date={date}/part-0.parquet'").df()
+def init_s3(con=None):
+    """Configurer DuckDB pour lire le bucket S3 public SSP Cloud."""
+    if con is None:
+        con = duckdb.connect()
+    con.execute("INSTALL httpfs; LOAD httpfs;")
+    con.execute(
+        "CREATE OR REPLACE SECRET (TYPE S3, KEY_ID '', SECRET '', "
+        "ENDPOINT 'minio.lab.sspcloud.fr', URL_STYLE 'path');"
+    )
+    return con
 
-def read_data_ligne(ligne):
-    """Lire l'integralite des donnees d'une ligne sur toutes les dates"""
-    df = duckdb.sql(f"SELECT * FROM read_parquet('s3://gpichonlegroux/rer-{ligne}/date=*/*.parquet', union_by_name=true) ORDER BY date DESC").df()
-    df["line"] = df["line"].fillna(f"rer_{ligne}")
+
+def read_s3(nom, depuis=DATE_DEBUT, con=None):
+    """Lire les partitions S3 d'une source depuis une date donnée."""
+    if con is None:
+        con = init_s3()
+
+    pattern = f"s3://gpichonlegroux/{SOURCES[nom]}/date=*/*.parquet"
+    fichiers = [row[0] for row in con.execute("SELECT file FROM glob(?) ORDER BY file", [pattern]).fetchall()]
+    fichiers = [f for f in fichiers if f.split("date=")[1].split("/")[0] >= depuis]
+    if not fichiers:
+        return pd.DataFrame()
+
+    df = con.execute(
+        "SELECT * FROM read_parquet(?, hive_partitioning=true, union_by_name=true)",
+        [fichiers],
+    ).df()
+    if nom != "incidents":
+        df["line"] = df["line"].fillna(nom) if "line" in df.columns else nom
     return df
 
-def read_incidents():
-    """Lire l'integralite des incidents sur toutes les dates"""
-    return duckdb.sql("SELECT * FROM read_parquet('s3://gpichonlegroux/incidents/date=*/*.parquet', union_by_name=true) ORDER BY date DESC").df()
 
-def save_data(ligne):
-    """Sauvegarder un dataset localement avec la date du jour pour éviter de requeter le serveur a chaque fois"""
-    df = read_data_ligne(ligne)
-    today = datetime.datetime.now().strftime("%Y-%m-%d")
+def update_source(nom, con=None):
+    """Mettre à jour le Parquet brut local d'une source."""
+    if con is None:
+        con = init_s3()
     RAW_DIR.mkdir(parents=True, exist_ok=True)
-    file_path = RAW_DIR / f"rer_{ligne}_{today}.parquet"
-    
-    df.to_parquet(file_path, index=False)
-    print(f"Données sauvegardées : {file_path}")
+    chemin = RAW_DIR / f"{nom}.parquet"
 
-def save_all():
-    """Sauvegarder les 3 lignes et les incidents dans data/raw"""
-    for ligne in ("a", "b", "d"):
-        save_data(ligne)
-    df_inc = read_incidents()
-    today = datetime.datetime.now().strftime("%Y-%m-%d")
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
-    file_path = RAW_DIR / f"incidents_{today}.parquet"
-    df_inc.to_parquet(file_path, index=False)
-    print(f"Données sauvegardées : {file_path}")
+    if not chemin.exists():
+        df = read_s3(nom, depuis=DATE_DEBUT, con=con)
+        if not df.empty:
+            df["date"] = pd.to_datetime(df["date"])
+            df.to_parquet(chemin, index=False)
+        return df
 
-def conversion(df):
-    """Exploser stops, convertir les horaires en Europe/Paris et trier les arrets dans l'ordre chronologique"""
-    df = df.copy()
-    df["stops"] = df["stops"].apply(json.loads)
-    df = df.explode("stops").dropna(subset=["stops"]).reset_index(drop=True)
+    max_date = con.execute("SELECT CAST(MAX(date) AS VARCHAR)[:10] FROM read_parquet(?)", [str(chemin)]).fetchone()[0]
+    depuis = max_date or DATE_DEBUT
+    df_new = read_s3(nom, depuis=depuis, con=con)
+    if df_new.empty:
+        return pd.read_parquet(chemin)
 
-    stops = pd.json_normalize(df["stops"]).rename(columns={
-        "n": "stop_name",
-        "ad": "aimed_time",
-        "ed": "expected_time",
-        "dt": "delay_sec",
-        "v": "platform",
-        "s": "status",
-    })
-    df = pd.concat([df.drop(columns=["stops"]), stops[["stop_name", "aimed_time", "expected_time", "delay_sec", "platform", "status"]]], axis=1)
-
-    df["aimed_time"] = pd.to_datetime(df["aimed_time"], format="ISO8601", utc=True, errors="coerce").dt.tz_convert("Europe/Paris")
-    df["expected_time"] = pd.to_datetime(df["expected_time"], format="ISO8601", utc=True, errors="coerce").dt.tz_convert("Europe/Paris")
-
-    group_cols = ["date", "journey_id"] if "date" in df.columns else ["journey_id"]
-    df = df.sort_values(group_cols + ["aimed_time"]).reset_index(drop=True)
-    df["stop_order"] = df.groupby(group_cols, sort=False).cumcount() + 1
-    df["delay_added_sec"] = df.groupby(group_cols, sort=False)["delay_sec"].diff().fillna(df["delay_sec"]).astype(int)
+    df_old = pd.read_parquet(chemin)
+    df_old["date"] = pd.to_datetime(df_old["date"])
+    df_new["date"] = pd.to_datetime(df_new["date"])
+    df = pd.concat([df_old[df_old["date"] < pd.Timestamp(depuis)], df_new], ignore_index=True)
+    df.to_parquet(chemin, index=False)
     return df
+
+
+def update_all():
+    """Mettre à jour toutes les sources dans data/raw/."""
+    con = init_s3()
+    for nom in SOURCES:
+        update_source(nom, con=con)
