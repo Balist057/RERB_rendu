@@ -1,28 +1,23 @@
-"""
-Axe 1 : comparaison des retards RER B / D (tunnel partagé) vs RER A (référence)
-
-Une ligne des fichiers clean_* = un arrêt d'un train dans une gare du tronçon central.
-Lancer depuis la racine du dépôt :  python analyse/stats.py
--> affiche un tableau récapitulatif et enregistre 4 graphiques dans analyse/figures/
-"""
+"On veut comparer le retard des lignes B et D avec celui de la ligne A"
+"On cherche à vérifier l'hypothèse suivante : un incident sur le RER B ou D se propage rapidement à l'autre ligne en raison du tronçon commun, rendant la régulation plus complexe et les retards plus persistants"
 
 from pathlib import Path
-
 import matplotlib.pyplot as plt
 import pandas as pd
 
 DATA = Path(__file__).resolve().parent.parent / "data"
 FIGURES = Path(__file__).resolve().parent / "figures"
-
 LIGNES = {"rer_a": "RER A", "rer_b": "RER B", "rer_d": "RER D"}
-# Couleurs proches des couleurs officielles, ajustées pour que B et D restent bien distinctes
+
+# Couleurs officielles des différents RER
 COULEURS = {"rer_a": "#E3051C", "rer_b": "#3F7DD0", "rer_d": "#00A88F"}
+
+#On regarde l'influence de la tranche horraire sur les retards
 TRANCHES = ["Pointe matin", "Heures creuses", "Pointe soir", "Soirée", "Week-end"]
 
 
 def charger(date="2026-11-25"):
-    """Empiler les 3 lignes. Renvoie tous les arrêts et les arrêts non supprimés
-    (IDFM met un retard de 0 aux arrêts supprimés, ce qui fausserait les moyennes)."""
+    "Renvoie tous les arrêts et les arrêts non supprimés, il y a un retard de 0 sur les arrêts supprimés donc nous ne les prenons pas en compte"
     df = pd.concat([pd.read_parquet(DATA / f"clean_rer_{l}_{date}.parquet") for l in "abd"])
     return df, df[~df["est_supprime"]]
 
