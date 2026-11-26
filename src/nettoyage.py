@@ -149,6 +149,9 @@ def preparer_donnees(source="local", sauvegarder=True):
     resultats = {}
     today = date.today().strftime("%Y-%m-%d")
 
+    if sauvegarder:
+        PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+
     for ligne in ("a", "b", "d"):
         df = charger_ligne(con, ligne, source=source)
         df = ajout_variables(df)
@@ -172,6 +175,9 @@ def charger_donnees_propres(source="local"):
         fichiers = [sorted(PROCESSED_DIR.glob(f"{prefix}_*.parquet")) for prefix in prefixes]
         if all(fichiers):
             return tuple(pd.read_parquet(f[-1]) for f in fichiers)
+        if all(f.exists() for f in FICHIERS_BRUTS.values()):
+            return preparer_donnees(source="local", sauvegarder=True)
+        return preparer_donnees(source="s3", sauvegarder=True)
     return preparer_donnees(source=source, sauvegarder=True)
 
 

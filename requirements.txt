@@ -1,5 +1,8 @@
 streamlit
 pandas
 matplotlib
+plotly
 duckdb
+pyarrow
+tzdata
 requests

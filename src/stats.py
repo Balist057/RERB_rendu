@@ -5,8 +5,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
-DATA = Path(__file__).resolve().parent.parent / "data"
-FIGURES = Path(__file__).resolve().parent / "figures"
+DATA = Path(__file__).resolve().parent.parent / "data" / "processed"
+FIGURES = Path(__file__).resolve().parent.parent / "docs" / "figures"
 LIGNES = {"rer_a": "RER A", "rer_b": "RER B", "rer_d": "RER D"}
 
 # Couleurs officielles des différents RER
@@ -16,9 +16,21 @@ COULEURS = {"rer_a": "#E3051C", "rer_b": "#3F7DD0", "rer_d": "#00A88F"}
 TRANCHES = ["Pointe matin", "Heures creuses", "Pointe soir", "Soirée", "Week-end"]
 
 
-def charger(date="2026-11-25"):
+def charger(date=None):
     "Renvoie tous les arrêts et les arrêts non supprimés, il y a un retard de 0 sur les arrêts supprimés donc nous ne les prenons pas en compte"
-    df = pd.concat([pd.read_parquet(DATA / f"clean_rer_{l}_{date}.parquet") for l in "abd"])
+    if date is not None:
+        df = pd.concat([pd.read_parquet(DATA / f"clean_rer_{l}_{date}.parquet") for l in "abd"])
+    else:
+        fichiers = [sorted(DATA.glob(f"clean_rer_{l}_*.parquet")) for l in "abd"]
+        if all(fichiers):
+            df = pd.concat([pd.read_parquet(f[-1]) for f in fichiers])
+        else:
+            try:
+                from src.nettoyage import charger_donnees_propres
+            except ImportError:
+                from nettoyage import charger_donnees_propres
+            df_a, df_b, df_d, _ = charger_donnees_propres()
+            df = pd.concat([df_a, df_b, df_d])
     return df, df[~df["est_supprime"]]
 
 
@@ -40,7 +52,7 @@ def graphique(tableau, titre, unite, fichier):
     axes[0].set_ylabel(unite)
     fig.suptitle(titre, fontweight="bold")
     fig.tight_layout()
-    FIGURES.mkdir(exist_ok=True)
+    FIGURES.mkdir(parents=True, exist_ok=True)
     fig.savefig(FIGURES / f"{fichier}.png", dpi=150)
 
 
