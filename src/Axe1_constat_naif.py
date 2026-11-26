@@ -2,7 +2,7 @@
 # AXE 1 : les retards du RER B et du RER D (qui partagent le tunnel Châtelet - Gare du Nord)
 # sont-ils plus élevés que ceux du RER A (référence : très fréquenté, mais sans voies partagées) ?
 # Dans cette partie, nous réalisons un simple constat naïf avec des calculs et graphiques simples qui donnent une idée du résultat.
-# Données : un arrêt d'un train dans une gare du tronçon central (02/10 au 23/11/2026).
+# Données : un arrêt d'un train dans une gare du tronçon central (à partir du 02/10/2026).
 # tableau récapitulatif + graphiques dans docs/figures/
 ######################################################################################################################################
 
