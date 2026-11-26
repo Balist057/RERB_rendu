@@ -72,6 +72,15 @@ if __name__ == "__main__":
     fig.colorbar(image, ax=ax, shrink=0.8, label="Corrélation (fenêtres de 15 min)")
     finir(ax, "Les retards de B et D évoluent ensemble", "axe2_1_correlation")
 
+    # Contrôle hors saisonnalité horaire (semaine/week-end + créneau de 15 min) et par sens
+    creneau = [chatelet.index.day_of_week < 5, chatelet.index.time]
+    residus = chatelet - chatelet.groupby(creneau).transform("mean")
+    corr_res = residus.corr()
+
+    df_ch = df[df["stop_name"] == "Châtelet-Les Halles"]
+    corr_nord = grille_15min(df_ch[df_ch["direction"] == "Nord"])[["rer_b", "rer_d"]].corr().iloc[0, 1]
+    corr_sud = grille_15min(df_ch[df_ch["direction"] == "Sud"])[["rer_b", "rer_d"]].corr().iloc[0, 1]
+
     # 2. Décalage : retard de B à l'instant t comparé au retard de D (ou A) à t + décalage
     decalages = range(-60, 75, 15)
     lags = pd.DataFrame(index=decalages)
@@ -90,20 +99,29 @@ if __name__ == "__main__":
     ax.legend(frameon=False)
     finir(ax, "Le retard de B se retrouve sur D, pas sur A", "axe2_2_decalage")
 
-    # 3. Retard moyen de D et de A à Châtelet selon l'état du RER B
-    # classe chaque fenêtre selon le retard de B : moins de 3 min, 3 à 10 min, plus de 10 min
-    etat_b = pd.cut(chatelet["rer_b"], bins=[-15, 3, 10, 180],
+    # 3. Contagion réciproque à Châtelet : état de B -> D vs A, et état de D -> B vs A
+    bins = [-15, 3, 10, 180]
+    etat_b = pd.cut(chatelet["rer_b"], bins=bins,
                     labels=["B fluide\n(< 3 min)", "B ralenti\n(3-10 min)", "B perturbé\n(> 10 min)"])
-    # retard moyen de D et de A dans chaque classe (observed=False garde les 3 classes même si l'une est vide)
+    etat_d = pd.cut(chatelet["rer_d"], bins=bins,
+                    labels=["D fluide\n(< 3 min)", "D ralenti\n(3-10 min)", "D perturbé\n(> 10 min)"])
     selon_b = chatelet.groupby(etat_b, observed=False)[["rer_d", "rer_a"]].mean()
+    selon_d = chatelet.groupby(etat_d, observed=False)[["rer_b", "rer_a"]].mean()
 
-    fig, ax = plt.subplots(figsize=(8, 4.5))
-    selon_b.rename(columns=LIGNES).plot.bar(ax=ax, color=[COULEURS["rer_d"], COULEURS["rer_a"]], rot=0)
-    for barres in ax.containers:                  # un groupe de barres par ligne : on écrit la valeur au-dessus
-        ax.bar_label(barres, fmt="%.1f", padding=3)
-    ax.set(xlabel="", ylabel="Retard moyen à Châtelet (min)")
-    ax.legend(frameon=False)
-    finir(ax, "Quand B est perturbé, D l'est aussi (A non)", "axe2_3_etat_de_B")
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.5), sharey=True)
+    selon_b.rename(columns=LIGNES).plot.bar(ax=ax1, color=[COULEURS["rer_d"], COULEURS["rer_a"]], rot=0)
+    selon_d.rename(columns=LIGNES).plot.bar(ax=ax2, color=[COULEURS["rer_b"], COULEURS["rer_a"]], rot=0)
+    for ax in (ax1, ax2):
+        for barres in ax.containers:
+            ax.bar_label(barres, fmt="%.1f", padding=3)
+        ax.set(xlabel="", ylabel="Retard moyen à Châtelet (min)")
+        ax.spines[["top", "right"]].set_visible(False)
+        ax.legend(frameon=False)
+    ax1.set_title("Selon l'état du RER B")
+    ax2.set_title("Selon l'état du RER D")
+    fig.suptitle("Effet domino réciproque entre B et D (A reste stable)", fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(FIGURES / "axe2_3_etat_de_B.png", dpi=150)
 
     # 4. Exemple : la journée la plus perturbée à la fois sur B et sur D
     par_jour = chatelet.groupby(chatelet.index.date).mean()            # retard moyen de chaque journée
@@ -139,26 +157,32 @@ if __name__ == "__main__":
     # Tableau récapitulatif : B et D comparés au A
     recap = pd.DataFrame(index=["Tunnel (B et D)", "Référence (A)"])
     recap["Corrélation des retards à Châtelet"] = [corr.loc["RER B", "RER D"], corr.loc["RER B", "RER A"]]
+    recap["Corrélation hors effet d'heure (résidus)"] = [corr_res.loc["rer_b", "rer_d"], corr_res.loc["rer_b", "rer_a"]]
     recap["Corrélation maximale (décalage ≤ 1 h)"] = [lags.iloc[:, 0].max(), lags.iloc[:, 1].max()]
     recap["Retard de l'autre ligne quand B est fluide (min)"] = [selon_b.iloc[0]["rer_d"], selon_b.iloc[0]["rer_a"]]
     recap["Retard de l'autre ligne quand B est perturbé (min)"] = [selon_b.iloc[2]["rer_d"], selon_b.iloc[2]["rer_a"]]
+    recap["Retard de B (vs A) quand D est perturbé (min)"] = [selon_d.iloc[2]["rer_b"], selon_d.iloc[2]["rer_a"]]
     recap = recap.round(2)
     # colonnes en texte ajoutées après l'arrondi, car elles regroupent B et D dans une même case
+    recap["Corrélation B / D par sens à Châtelet"] = [f"Sud {corr_sud:.2f} / Nord {corr_nord:.2f}", "-"]
     recap["Temps de retour médian après un pic (min)"] = [
         f"B {retours['rer_b'].median():.0f} / D {retours['rer_d'].median():.0f}", f"{retours['rer_a'].median():.0f}"]
     recap["Nombre de pics > 10 min"] = [f"B {len(retours['rer_b'])} / D {len(retours['rer_d'])}", len(retours["rer_a"])]
     recap = recap.T                    # transposée : une ligne par indicateur
     recap["Conclusion"] = [
         "Les retards de B et D évoluent ensemble, bien plus qu'avec A",
+        "Sans la pointe commune, le lien avec A disparaît (pas entre B et D)",
         f"Le lien B → D est maximal avec {meilleur} min de décalage",
         "Point de comparaison : retard habituel de chaque ligne",
         "D décroche quand B est perturbé, A reste stable",
+        "La contagion est réciproque : D perturbé entraîne aussi B",
+        "Contagion plus de 2 fois plus forte en sens Sud",
         "B met 2 fois plus de temps que A à revenir à la normale, D un peu plus",
         "Les pics sont 3 à 4 fois plus fréquents sur B et D",
     ]
     print(recap.to_string())
 
-    fig, ax = plt.subplots(figsize=(14, 3.5))
+    fig, ax = plt.subplots(figsize=(14, 4.5))
     ax.axis("off")                    
     table = ax.table(cellText=recap.values, rowLabels=recap.index, colLabels=recap.columns,
                      loc="center", cellLoc="center", rowLoc="left")

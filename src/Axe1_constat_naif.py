@@ -61,8 +61,8 @@ if __name__ == "__main__":
     # Contrôle à Châtelet, seule gare commune aux 3 lignes
     chatelet = df[df["stop_name"] == "Châtelet-Les Halles"].groupby("line")["retard_min"].mean()
 
-    # 2. Retard ajouté à chaque arrêt (s), dans le tunnel ou ailleurs
-    tunnel = df.groupby(["line", "zone_tunnel"])["delay_added_sec"].mean().unstack()
+    # 2. Retard ajouté à chaque arrêt (s), dans le tunnel ou ailleurs (hors 1er arrêt)
+    tunnel = df[df["stop_order"] > 1].groupby(["line", "zone_tunnel"])["delay_added_sec"].mean().unstack()
     tunnel.columns = ["Hors tunnel", "Dans le tunnel"]
     graphique(tunnel, "Retard ajouté par arrêt", "Secondes", "axe1_2_tunnel")
 
@@ -72,6 +72,11 @@ if __name__ == "__main__":
              ((bd["direction"] == "Sud") & (bd["stop_name"] == "Châtelet-Les Halles"))
     sens = bd.groupby(["line", sortie.map({False: "Entrée", True: "Sortie"})])["delay_added_sec"].mean().unstack()
     graphique(sens, "Retard ajouté à l'entrée et à la sortie du tunnel", "Secondes", "axe1_5_sens_tunnel")
+
+    # Retard ajouté dans le tunnel selon le moment de la journée (toutes lignes, sens standards)
+    tun_tr = df[df["zone_tunnel"] & (df["stop_order"] > 1) & df["direction"].isin(["Nord", "Sud", "Est", "Ouest"])]
+    tunnel_tranches = tun_tr.groupby(["line", "tranche_horaire"])["delay_added_sec"].mean().unstack()[TRANCHES]
+    graphique(tunnel_tranches, "Retard ajouté dans le tunnel selon le moment de la journée", "Secondes", "axe1_8_tunnel_tranches")
 
     # 3. Retard moyen (min) selon le moment de la journée, et hausse en pointe (semaine)
     tranches = df.groupby(["line", "tranche_horaire"])["retard_min"].mean().unstack()[TRANCHES]
@@ -98,11 +103,12 @@ if __name__ == "__main__":
         "Retard moyen d'une journée type (min)": par_jour.median(),
         "Jours à plus de 5 min de retard moyen": (par_jour > 5).sum(),
         "Retard ajouté dans le tunnel (s/arrêt)": tunnel["Dans le tunnel"],
+        "Retard ajouté dans le tunnel en pointe soir (s/arrêt)": tunnel_tranches["Pointe soir"],
         "Retard ajouté en sortie de tunnel (s/arrêt)": sens["Sortie"],
         "Hausse en heure de pointe (min)": hausse_pointe,
         "Trains supprimés (%)": suppr["Supprimés"],
         "Trains limités en parcours (%)": suppr["Limités"],
-    }).T.rename(columns=LIGNES).rename_axis(columns=None).round(1).fillna("-")
+    }).T.rename(columns=LIGNES).rename_axis(columns=None).round(1).astype(object).fillna("-")
     recap["Conclusion"] = [
         "B et D sont en moyenne bien plus en retard que A",
         "Les gros retards sont près de 2 fois plus forts sur B et D",
@@ -110,6 +116,7 @@ if __name__ == "__main__":
         "Même un jour ordinaire, B et D sont 2 à 3 fois plus en retard que A",
         "Aucune journée noire sur A, plusieurs sur B et D (à étudier dans l'axe 3)",
         "A rattrape du retard dans Paris, B et D en prennent",
+        "Effet structurel du tunnel amplifié en pointe soir sur B et D (A reste négatif)",
         "Le retard se prend à la sortie du tunnel (A non concerné)",
         "L'heure de pointe pèse environ 2 fois plus sur B et D",
         "Plus de suppressions sur D",
