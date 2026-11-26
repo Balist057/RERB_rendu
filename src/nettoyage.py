@@ -1,15 +1,13 @@
-from datetime import date
-from pathlib import Path
 import duckdb
 import pandas as pd
 
+try:
+    from src.lecture import DATE_DEBUT, RAW_DIR, init_s3, update_all
+except ImportError:
+    from lecture import DATE_DEBUT, RAW_DIR, init_s3, update_all
 
-DATE_DEBUT = "2026-10-02"
-DATE_FIN = "2026-11-23"
 
-BASE_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-RAW_DIR = BASE_DATA_DIR / "raw"
-PROCESSED_DIR = BASE_DATA_DIR / "processed"
+PROCESSED_DIR = RAW_DIR.parent / "processed"
 
 GARES_CENTRALES = {
     "a": [
@@ -43,17 +41,11 @@ GARES_CENTRALES = {
 }
 
 FICHIERS_BRUTS = {
-    "a": RAW_DIR / "rer_a_2026-11-24.parquet",
-    "b": RAW_DIR / "rer_b_2026-11-24.parquet",
-    "d": RAW_DIR / "rer_d_2026-11-24.parquet",
-    "incidents": RAW_DIR / "incidents_2026-11-24.parquet",
+    "a": RAW_DIR / "rer_a.parquet",
+    "b": RAW_DIR / "rer_b.parquet",
+    "d": RAW_DIR / "rer_d.parquet",
+    "incidents": RAW_DIR / "incidents.parquet",
 }
-
-
-def init_s3(con):
-    """Configurer l'accès anonyme au stockage S3 public SSP Cloud."""
-    con.execute("INSTALL httpfs; LOAD httpfs;")
-    con.execute("CREATE OR REPLACE SECRET (TYPE S3, KEY_ID '', SECRET '', ENDPOINT 'minio.lab.sspcloud.fr', URL_STYLE 'path');")
 
 
 def charger_ligne(con, ligne, source="local"):
@@ -64,20 +56,16 @@ def charger_ligne(con, ligne, source="local"):
     gares = GARES_CENTRALES[ligne]
     if source == "local":
         chemin = str(FICHIERS_BRUTS[ligne])
-        filtre_date = "WHERE date BETWEEN ? AND ?"
-        params = [chemin, DATE_DEBUT, DATE_FIN, gares]
     else:
         init_s3(con)
         chemin = f"s3://gpichonlegroux/rer-{ligne}/date=*/*.parquet"
-        filtre_date = "WHERE date >= ?"
-        params = [chemin, DATE_DEBUT, gares]
 
-    query = f"""
+    query = """
     WITH base AS (
         SELECT * EXCLUDE (stops),
-               UNNEST(from_json(stops, '[{{"n":"VARCHAR","ad":"TIMESTAMPTZ","ed":"TIMESTAMPTZ","dt":"BIGINT","v":"VARCHAR","s":"VARCHAR"}}]')) AS stop
+               UNNEST(from_json(stops, '[{"n":"VARCHAR","ad":"TIMESTAMPTZ","ed":"TIMESTAMPTZ","dt":"BIGINT","v":"VARCHAR","s":"VARCHAR"}]')) AS stop
         FROM read_parquet(?, union_by_name=true)
-        {filtre_date}
+        WHERE date >= ?
     ),
     ord AS (
         SELECT * EXCLUDE (stop),
@@ -95,7 +83,7 @@ def charger_ligne(con, ligne, source="local"):
     WHERE list_contains(?, stop_name)
     ORDER BY date, journey_id, aimed_time
     """
-    df = con.execute(query, params).df()
+    df = con.execute(query, [chemin, DATE_DEBUT, gares]).df()
     df["line"] = df["line"].fillna(f"rer_{ligne}")
     df["aimed_time"] = df["aimed_time"].dt.tz_convert("Europe/Paris")
     df["expected_time"] = df["expected_time"].dt.tz_convert("Europe/Paris")
@@ -108,14 +96,12 @@ def charger_incidents(con, source="local"):
         raise ValueError("source doit valoir 'local' ou 's3'")
 
     if source == "local":
-        query = "SELECT * FROM read_parquet(?, union_by_name=true) WHERE date BETWEEN ? AND ?"
-        params = [str(FICHIERS_BRUTS["incidents"]), DATE_DEBUT, DATE_FIN]
+        chemin = str(FICHIERS_BRUTS["incidents"])
     else:
         init_s3(con)
-        query = "SELECT * FROM read_parquet(?, union_by_name=true) WHERE date >= ?"
-        params = ["s3://gpichonlegroux/incidents/date=*/*.parquet", DATE_DEBUT]
+        chemin = "s3://gpichonlegroux/incidents/date=*/*.parquet"
 
-    return con.execute(query, params).df()
+    return con.execute("SELECT * FROM read_parquet(?, union_by_name=true) WHERE date >= ?", [chemin, DATE_DEBUT]).df()
 
 
 def ajout_variables(df):
@@ -143,11 +129,13 @@ def ajout_variables(df):
     return df
 
 
-def preparer_donnees(source="local", sauvegarder=True):
+def preparer_donnees(source="local", sauvegarder=True, maj=False):
     """Nettoyer les données et exporter les Parquet prêts pour l'analyse."""
+    if source == "local" and (maj or not all(f.exists() for f in FICHIERS_BRUTS.values())):
+        update_all()
+
     con = duckdb.connect()
     resultats = {}
-    today = date.today().strftime("%Y-%m-%d")
 
     if sauvegarder:
         PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
@@ -156,32 +144,26 @@ def preparer_donnees(source="local", sauvegarder=True):
         df = charger_ligne(con, ligne, source=source)
         df = ajout_variables(df)
         if sauvegarder:
-            df.to_parquet(PROCESSED_DIR / f"clean_rer_{ligne}_{today}.parquet", index=False)
+            df.to_parquet(PROCESSED_DIR / f"clean_rer_{ligne}.parquet", index=False)
         resultats[ligne] = df
 
     df_incidents = charger_incidents(con, source=source)
     con.close()
 
     if sauvegarder:
-        df_incidents.to_parquet(PROCESSED_DIR / f"clean_incidents_{today}.parquet", index=False)
+        df_incidents.to_parquet(PROCESSED_DIR / "clean_incidents.parquet", index=False)
 
     return resultats["a"], resultats["b"], resultats["d"], df_incidents
 
 
-def charger_donnees_propres(source="local"):
-    """Lire les Parquet nettoyés les plus récents (ou les générer depuis local/S3)."""
-    prefixes = ("clean_rer_a", "clean_rer_b", "clean_rer_d", "clean_incidents")
-    if source == "local":
-        fichiers = [sorted(PROCESSED_DIR.glob(f"{prefix}_*.parquet")) for prefix in prefixes]
-        if all(fichiers):
-            return tuple(pd.read_parquet(f[-1]) for f in fichiers)
-        if all(f.exists() for f in FICHIERS_BRUTS.values()):
-            return preparer_donnees(source="local", sauvegarder=True)
-        return preparer_donnees(source="s3", sauvegarder=True)
-    return preparer_donnees(source=source, sauvegarder=True)
-
-
-if __name__ == "__main__":
-    df_a, df_b, df_d, df_inc = preparer_donnees(sauvegarder=True)
-    for nom, df in [("RER A", df_a), ("RER B", df_b), ("RER D", df_d), ("Incidents", df_inc)]:
-        print(f"{nom}: {df.shape}")
+def charger_donnees_propres(source="local", maj=False):
+    """Lire les Parquet nettoyés (ou les générer depuis local/S3)."""
+    fichiers = [
+        PROCESSED_DIR / "clean_rer_a.parquet",
+        PROCESSED_DIR / "clean_rer_b.parquet",
+        PROCESSED_DIR / "clean_rer_d.parquet",
+        PROCESSED_DIR / "clean_incidents.parquet",
+    ]
+    if source == "local" and not maj and all(f.exists() for f in fichiers):
+        return tuple(pd.read_parquet(f) for f in fichiers)
+    return preparer_donnees(source=source, sauvegarder=True, maj=maj)
