@@ -1,9 +1,15 @@
+# Données
 data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+
+# Docs et figures
 docs/*
 !docs/.gitkeep
+!docs/figures/
+docs/figures/*
+!docs/figures/.gitkeep
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
