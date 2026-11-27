@@ -556,12 +556,12 @@ def construire_carte_replay(
             args=[[f"step_{step}"], {"frame": {"duration": 0, "redraw": True}, "mode": "immediate"}],
             label=label_m,
         ))
-
     fig_map.frames = frames
     fig_map.update_layout(
         map=dict(style="carto-positron", center=dict(lat=48.865, lon=2.365), zoom=10.4),
-        margin=dict(l=0, r=0, t=42, b=0),
-        height=640,
+        paper_bgcolor="white",
+        margin=dict(l=0, r=0, t=42, b=95),
+        height=690,
         font=dict(color="#111111"),
         annotations=[construire_annotation(calculer_etat_tunnel(segs_bd, t_start))],
         legend=dict(
@@ -575,20 +575,21 @@ def construire_carte_replay(
         ),
         updatemenus=[dict(
             type="buttons",
+            direction="right",
             showactive=False,
-            x=0.01, y=0.06, xanchor="left", yanchor="bottom",
-            bgcolor="rgba(255,255,255,0.95)",
+            x=0.01, y=-0.03, xanchor="left", yanchor="top",
+            bgcolor="#F8F9FA",
             bordercolor="#CCCCCC",
             borderwidth=1,
-            font=dict(size=12, color="#111111"),
+            font=dict(size=20, color="#111111"),
             buttons=[
                 dict(
-                    label="▶️ Animer",
+                    label="Animer",
                     method="animate",
                     args=[None, {"frame": {"duration": vitesse_ms, "redraw": True}, "fromcurrent": True, "transition": {"duration": 0}}],
                 ),
                 dict(
-                    label="⏸️ Pause",
+                    label="Pause",
                     method="animate",
                     args=[[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate"}],
                 ),
@@ -596,7 +597,7 @@ def construire_carte_replay(
         )],
         sliders=[dict(
             active=0,
-            x=0.19, len=0.79, y=0.06, yanchor="bottom",
+            x=0.25, len=0.74, y=-0.02, yanchor="top",
             bgcolor="rgba(255,255,255,0.94)",
             bordercolor="#CCCCCC",
             borderwidth=1,
