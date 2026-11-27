@@ -84,16 +84,10 @@ def charger_incidents_perturbations():
     return df_filtre
 
 def charger_journee_corridor(date_str: str):
-    # Charger les coordonnées GPS des gares dans un dictionnaire
+    # Charger les coordonnées GPS des gares
     df_coords = pd.read_csv(COORDS_CSV)
-    coords_gares = {}
-    
-    for index, ligne in df_coords.iterrows():
-        cle_gare = normaliser_nom(ligne["stop_name"])
-        coords_gares[cle_gare] = {
-            "lat": ligne["lat"],
-            "lon": ligne["lon"]
-        }
+    df_coords["key"] = df_coords["stop_name"].apply(normaliser_nom)
+    df_coords = df_coords.drop_duplicates("key")[["key", "lat", "lon"]]
 
     # Créer la liste complète de toutes les gares autorisées
     gares_autorisees = set()
@@ -104,10 +98,11 @@ def charger_journee_corridor(date_str: str):
     # Lire les fichiers parquet de chaque ligne avec DuckDB
     connexion = duckdb.connect()
     tableaux_par_ligne = []
+    jour_suivant = (pd.Timestamp(date_str) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
 
     for ligne in ["rer_a", "rer_b", "rer_d"]:
         chemin_parquet = RAW_DIR / f"{ligne}.parquet"
-        
+
         requete_sql = f"""
         WITH arrets_deplies AS (
             SELECT
@@ -120,7 +115,7 @@ def charger_journee_corridor(date_str: str):
                     '[{{"n":"VARCHAR","ad":"VARCHAR","ed":"VARCHAR","dt":"INT","s":"VARCHAR"}}]'
                 )) AS arret
             FROM read_parquet('{chemin_parquet}')
-            WHERE CAST(date AS DATE) = DATE '{date_str}'
+            WHERE date >= '{date_str}' AND date < '{jour_suivant}'
         )
         SELECT
             line,
@@ -135,8 +130,10 @@ def charger_journee_corridor(date_str: str):
         FROM arrets_deplies
         WHERE arret.ad IS NOT NULL
         """
-        
+
         df_ligne = connexion.execute(requete_sql).df()
+        if df_ligne.empty:
+            continue
 
         # Mise au format date avec fuseau horaire
         df_ligne["aimed_time"] = pd.to_datetime(df_ligne["aimed_time"]).dt.tz_localize("Europe/Paris")
@@ -146,29 +143,24 @@ def charger_journee_corridor(date_str: str):
         df_ligne = df_ligne.sort_values(["journey_id", "aimed_time"])
 
         # Calculs colonnes supplémentaires
-        df_ligne["stop_order"] = df_ligne.groupby("journey_id").cumcount() + 1 # numerotation des arrets
+        df_ligne["stop_order"] = df_ligne.groupby("journey_id").cumcount() + 1
         df_ligne["retard_min"] = (df_ligne["delay_sec"] / 60.0).round(1)
         df_ligne["est_supprime"] = df_ligne["status"] == "CANCELLED"
 
         tableaux_par_ligne.append(df_ligne)
 
+    if not tableaux_par_ligne:
+        return pd.DataFrame()
+
     # Rassembler toutes les lignes (A, B et D)
     df_complet = pd.concat(tableaux_par_ligne, ignore_index=True)
 
-    # Filtrer et completer avec les coordonnees
-    lignes_valides = []
-    for index, ligne in df_complet.iterrows():
-        cle = normaliser_nom(ligne["stop_name"])
-        
-        # Uniformiser le nom de Châtelet
-        if "chatelet" in cle and "halles" in cle:
-            cle = "chatelet les halles"
-            ligne["stop_name"] = "Châtelet-Les Halles"
+    # Filtrer et compléter avec les coordonnées
+    df_complet["key"] = df_complet["stop_name"].apply(normaliser_nom)
 
-        if cle in gares_autorisees and cle in coords_gares:
-            ligne["key"] = cle
-            ligne["lat"] = coords_gares[cle]["lat"]
-            ligne["lon"] = coords_gares[cle]["lon"]
-            lignes_valides.append(ligne)
+    est_chatelet = df_complet["key"].str.contains("chatelet") & df_complet["key"].str.contains("halles")
+    df_complet.loc[est_chatelet, "key"] = "chatelet les halles"
+    df_complet.loc[est_chatelet, "stop_name"] = "Châtelet-Les Halles"
 
-    return pd.DataFrame(lignes_valides)
+    df_filtre = df_complet[df_complet["key"].isin(gares_autorisees)]
+    return df_filtre.merge(df_coords, on="key", how="inner")
