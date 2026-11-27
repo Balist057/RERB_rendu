@@ -56,6 +56,10 @@ with st.sidebar:
             default=defaut_lignes,
             format_func=lambda x: x.upper().replace("_", " "),
         )
+        st.caption(
+            "Les alertes textuelles PRIM ne couvrent que les RER A et B (flux SNCF du RER D absent). "
+            "Les trains du RER D restent affichés sur la carte ; utilisez « Date & heure libres » pour un incident propre au D."
+        )
 
         # Filtrage par ligne puis par catégorie d'incident
         df_par_ligne = df_incidents[df_incidents["line"].isin(lignes_filtrees)]
