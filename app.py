@@ -9,6 +9,7 @@ pages = [
     st.Page("pages/3_Axe2_Contagion.py", title="Axe 2 : Contagion"),
     st.Page("pages/4_Axe3_Incidents.py", title="Axe 3 : Incidents"),
     st.Page("pages/5_Replays.py", title="Replay carte"),
+    st.Page("pages/6_Conclusion.py", title="Conclusion"),
 ]
 
 pg = st.navigation(pages)
