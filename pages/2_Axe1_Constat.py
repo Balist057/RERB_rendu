@@ -6,6 +6,12 @@ from src.Axe1_constat_naif import LIGNES, TRANCHES
 from src.dashboard_utils import COULEURS_NOMS, filtres_sidebar, mise_en_page, tracer_barres
 
 st.title("Axe 1 : Constat")
+st.write(
+    "Comparaison des retards du `RER B` et du `RER D` avec ceux du `RER A` (ligne témoin) sur le tronçon central. "
+    "Les graphiques distinguent les retards globaux et extrêmes (`P90`, `P95`), le retard pris spécifiquement dans le tunnel, "
+    "l'effet des tranches horaires et l'évolution quotidienne (avec un seuil de `5 min` pour repérer les journées dégradées)."
+)
+
 _, df, _ = filtres_sidebar()
 
 r = df.groupby("line")["retard_min"]

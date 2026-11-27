@@ -7,6 +7,11 @@ from src.axe2_contagion import grille_15min, temps_de_retour
 from src.dashboard_utils import filtres_sidebar, mise_en_page, tracer_barres
 
 st.title("Axe 2 : Contagion")
+st.write(
+    "Mesure du lien entre les retards du `RER B` et du `RER D` à `Châtelet-Les Halles` par fenêtres de `15 minutes` "
+    "(corrélation brute, corrélation hors effet d'heure et temps médian pour repasser sous `3 min` après un pic `> 10 min`). "
+    "Les deux graphiques analysent le décalage temporel entre lignes et le retard moyen subi selon l'état de la ligne déclencheuse."
+)
 _, df, _ = filtres_sidebar()
 
 chat = grille_15min(df[df["stop_name"] == "Châtelet-Les Halles"])

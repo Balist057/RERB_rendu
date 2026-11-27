@@ -8,6 +8,12 @@ from src.axe3_incidents import detecter_incidents, series_tunnel
 from src.dashboard_utils import filtres_sidebar
 
 st.title("Axe 3 : Incidents")
+st.write(
+    "Le tableau classe les principaux épisodes de perturbation détectés dans le tunnel (pics de retard, durée et cause officielle). "
+    "Le graphique ci-dessous détaille, pour l'épisode sélectionné, l'évolution du retard par ligne et la chute du débit `B + D` "
+    "par rapport au trafic habituel à `Châtelet-Les Halles`."
+)
+
 df_all_f, _, df_inc = filtres_sidebar()
 
 if not {"rer_a", "rer_b", "rer_d"}.issubset(df_all_f["line"].unique()):
