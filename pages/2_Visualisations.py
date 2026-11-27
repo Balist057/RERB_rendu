@@ -11,7 +11,6 @@ from src.replay import (
     preparer_segments,
 )
 
-st.set_page_config(page_title="Replay RER", layout="wide")
 st.title("Replay RER")
 
 HEURES_PRESETS = {
