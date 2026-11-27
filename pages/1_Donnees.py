@@ -133,6 +133,12 @@ st.write(
     "et convertit les horaires en heure de Paris (`Europe/Paris`)."
 )
 
+# Aperçu d'un train juste après charger_ligne()
+train_exemple = df_b[df_b["journey_id"] == df_b["journey_id"].iloc[0]].head(6)
+st.write("État d'un trajet après `charger_ligne()` :")
+cols_etape2 = ["stop_order", "stop_name", "aimed_time", "delay_sec", "delay_added_sec"]
+st.dataframe(train_exemple[cols_etape2], use_container_width=True, hide_index=True)
+
 # Étape 3 : Pandas
 st.subheader("Étape 3 : Nettoyage statistique et variables supplémentaires (`ajout_variables`)")
 st.write("On applique ensuite les règles suivantes avant d'exporter les tables finales dans `data/processed/` :")
@@ -158,8 +164,30 @@ st.dataframe(df_b[colonnes_apercu].head(6), use_container_width=True, hide_index
 
 st.divider()
 
+# Gestion des incidents
+st.header("Gestion des alertes incidents (`incidents.parquet`)")
+st.write(
+    "En parallèle des passages de trains, le collecteur enregistre les alertes trafic de l'API `PRIM`. "
+    "Dans cette table, **1 ligne = 1 alerte**, avec sa ligne (`line`), son début (`first_seen`), "
+    "sa fin (`last_seen`), son titre (`short_message`) et son détail (`message`)."
+)
+st.write(
+    "Le traitement se fait en deux étapes :\n"
+    "- **Extraction (`charger_incidents` dans `src/nettoyage.py`) :** lecture depuis le S3 à partir du `02/10/2026` "
+    "et sauvegarde dans `data/processed/clean_incidents.parquet`.\n"
+    "- **Filtrage et exploitation (`src/axe3_incidents.py` et `src/replay.py`) :** conversion des heures en `Europe/Paris`, "
+    "retrait des messages de **travaux planifiés**, puis extraction de la cause (colis suspect, malaise voyageur, panne...) "
+    "pour croiser chaque incident avec les chutes de débit dans le tunnel."
+)
+
+st.write("Aperçu de la table `clean_incidents.parquet` :")
+cols_inc = ["line", "first_seen", "last_seen", "short_message"]
+st.dataframe(df_inc[cols_inc].head(5), use_container_width=True, hide_index=True)
+
+st.divider()
+
 # Limites connues
-st.header("3. Limites des données temps réel")
+st.header("Limites des données temps réel")
 st.write(
     "- **Décalage de collecte :** la collecte du `RER D` et des messages d'incidents démarre le `07/10/2026` "
     "(contre le `02/10/2026` pour les `RER A` et `B`). Les analyses reposent donc sur des moyennes et des proportions."

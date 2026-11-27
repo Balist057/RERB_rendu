@@ -56,8 +56,8 @@ NIVEAUX_RETARD = [
 ]
 
 MODES_REPLAY = {
-    "Zoom tunnel : 15 min (pas 10s)": {"duree_min": 15, "pas_sec": 10, "frame_ms": 80},
-    "Vue standard : 30 min (pas 30s)": {"duree_min": 30, "pas_sec": 30, "frame_ms": 200},
+    "Zoom tunnel : 30 min (pas 10s)": {"duree_min": 30, "pas_sec": 10, "frame_ms": 80},
+    "Vue standard : 60 min (pas 30s)": {"duree_min": 60, "pas_sec": 30, "frame_ms": 120},
 }
 
 

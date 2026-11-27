@@ -85,7 +85,7 @@ with st.sidebar:
         # Démarrer avant l'annonce pour voir le début réel de la saturation
         marge_avant_min = st.slider(
             "Démarrer avant l'annonce (min)",
-            min_value=0, max_value=30, value=15, step=5,
+            min_value=0, max_value=30, value=5, step=5,
             help="Reculer de 15 min permet de voir la formation du bouchon avant l'annonce officielle.",
         )
 
