@@ -78,7 +78,7 @@ df_resume = pd.DataFrame(lignes_resume)
 # Affichage du dataframa dans streamlit
 st.dataframe(
     df_resume,
-    use_container_width=True,
+    width='stretch',
     hide_index=True,
     column_config={
         "Trajets bruts": st.column_config.NumberColumn(format="%d"),
@@ -148,7 +148,7 @@ st.write(
 train_exemple = df_b[df_b["journey_id"] == df_b["journey_id"].iloc[0]].head(6)
 st.write("État d'un trajet après `charger_ligne()` :")
 cols_etape2 = ["stop_order", "stop_name", "aimed_time", "delay_sec", "delay_added_sec"]
-st.dataframe(train_exemple[cols_etape2], use_container_width=True, hide_index=True)
+st.dataframe(train_exemple[cols_etape2], width='stretch', hide_index=True)
 
 # Étape 3 : Pandas
 st.subheader("Étape 3 : Nettoyage statistique et variables supplémentaires (`ajout_variables`)")
@@ -171,7 +171,7 @@ colonnes_apercu = [
     "date", "journey_id", "stop_order", "stop_name",
     "retard_min", "delay_added_sec", "est_supprime", "zone_tunnel", "tranche_horaire",
 ]
-st.dataframe(df_b[colonnes_apercu].head(6), use_container_width=True, hide_index=True)
+st.dataframe(df_b[colonnes_apercu].head(6), width='stretch', hide_index=True)
 
 st.divider()
 
@@ -193,7 +193,7 @@ st.write(
 
 st.write("Aperçu de la table `clean_incidents.parquet` :")
 cols_inc = ["line", "first_seen", "last_seen", "short_message"]
-st.dataframe(df_inc[cols_inc].head(5), use_container_width=True, hide_index=True)
+st.dataframe(df_inc[cols_inc].head(5), width='stretch', hide_index=True)
 
 st.divider()
 
