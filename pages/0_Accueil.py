@@ -64,5 +64,8 @@ st.write(
 st.divider()
 
 st.header("Navigation")
-st.write("- `Dashboard` : graphiques et tableaux récapitulatifs des trois axes d'analyse.")
+st.write("- `Données` : aperçu des volumes collectés, sources et structure des données.")
+st.write("- `Axe 1 : Constat` : retards globaux, effet du tunnel, tranches horaires et évolution journalière.")
+st.write("- `Axe 2 : Contagion` : corrélations à Châtelet, décalage temporel et effet domino B / D.")
+st.write("- `Axe 3 : Incidents` : top des crises détectées dans le tunnel et zoom sur les débits et retards.")
 st.write("- `Replay carte` : replay interactif sur carte pour suivre la circulation des trains et la saturation du tunnel avant et pendant un incident.")
