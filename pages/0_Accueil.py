@@ -1,7 +1,5 @@
 import streamlit as st
 
-st.set_page_config(page_title="Projet RER — Tunnel B / D", layout="wide")
-
 st.title("L'effet domino dans le tunnel RER B / RER D")
 st.write("Projet Python pour la data science — ENSAE 2A")
 
@@ -67,4 +65,4 @@ st.divider()
 
 st.header("Navigation")
 st.write("- `Dashboard` : graphiques et tableaux récapitulatifs des trois axes d'analyse.")
-st.write("- `Visualisations` : replay interactif sur carte pour suivre la circulation des trains et la saturation du tunnel avant et pendant un incident.")
+st.write("- `Replay carte` : replay interactif sur carte pour suivre la circulation des trains et la saturation du tunnel avant et pendant un incident.")
