@@ -64,5 +64,6 @@ st.write(
 st.divider()
 
 st.header("Navigation")
+st.write("- `Données` : volumétrie des sources collectées, import et nettoyage des données, limites des données temps réel.")
 st.write("- `Dashboard` : graphiques et tableaux récapitulatifs des trois axes d'analyse.")
 st.write("- `Replay carte` : replay interactif sur carte pour suivre la circulation des trains et la saturation du tunnel avant et pendant un incident.")
