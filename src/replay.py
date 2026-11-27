@@ -126,7 +126,21 @@ def categoriser_incident(titre: str):
     return "Autre perturbation"
 
 
+def assurer_donnees_locales():
+    """Télécharge et prépare les Parquet depuis S3 si le dépôt vient d'être cloné."""
+    prets = (PROCESSED_DIR / "clean_incidents.parquet").exists() and all(
+        (RAW_DIR / f"{l}.parquet").exists() for l in ("rer_a", "rer_b", "rer_d")
+    )
+    if not prets:
+        try:
+            from src.nettoyage import charger_donnees_propres
+        except ImportError:
+            from nettoyage import charger_donnees_propres
+        charger_donnees_propres()
+
+
 def charger_incidents_perturbations():
+    assurer_donnees_locales()
     fichier_incidents = PROCESSED_DIR / "clean_incidents.parquet"
     df_incidents = pd.read_parquet(fichier_incidents)
 
@@ -168,6 +182,7 @@ def extraire_dates_disponibles(df_incidents: pd.DataFrame):
     return [datetime.date.today()]
 
 def charger_journee_corridor(date_str: str):
+    assurer_donnees_locales()
     # Charger les coordonnées GPS des gares
     df_coords = pd.read_csv(COORDS_CSV)
     df_coords["key"] = df_coords["stop_name"].apply(normaliser_nom)
@@ -220,8 +235,12 @@ def charger_journee_corridor(date_str: str):
             continue
 
         # Mise au format date avec fuseau horaire
-        df_ligne["aimed_time"] = pd.to_datetime(df_ligne["aimed_time"]).dt.tz_localize("Europe/Paris")
-        df_ligne["expected_time"] = pd.to_datetime(df_ligne["expected_time"]).dt.tz_localize("Europe/Paris")
+        df_ligne["aimed_time"] = pd.to_datetime(df_ligne["aimed_time"]).dt.tz_localize(
+            "Europe/Paris", ambiguous="NaT", nonexistent="shift_forward"
+        )
+        df_ligne["expected_time"] = pd.to_datetime(df_ligne["expected_time"]).dt.tz_localize(
+            "Europe/Paris", ambiguous="NaT", nonexistent="shift_forward"
+        )
 
         # Trier les arrêts dans l'ordre chronologique pour chaque train
         df_ligne = df_ligne.sort_values(["journey_id", "aimed_time"])
