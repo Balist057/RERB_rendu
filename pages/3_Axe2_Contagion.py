@@ -56,3 +56,15 @@ dom = chat.groupby(etats, observed=False)[[tgt, "rer_a"]].mean().T
 c1, c2 = st.columns(2)
 c1.plotly_chart(fig_dec, width="stretch")
 c2.plotly_chart(tracer_barres(dom, f"Retard selon l'état du {decl}", "Retard moyen (min)"), width="stretch")
+
+st.divider()
+st.markdown(
+    """
+**À retenir** (données du 02/10 au 26/11/2026) :
+
+- Les retards de B et D **évoluent ensemble** (corrélation 0,26 contre 0,08 avec A), même sans l'effet commun de l'heure de pointe (0,22 contre 0,02).
+- Le retard de B se retrouve sur D **15 minutes plus tard**, et l'effet joue dans les deux sens.
+- Quand B est perturbé, le retard de D passe de 2,3 à **7,4 min** ; A reste vers 1 min.
+- B est le plus lent à se remettre : **150 min** en médiane après un pic, contre environ 70 pour A et D.
+"""
+)

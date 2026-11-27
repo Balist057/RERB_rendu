@@ -40,3 +40,14 @@ fig_jour.add_hline(y=5, line_dash="dash", line_color="grey", annotation_text="Se
 c3, c4 = st.columns(2)
 c3.plotly_chart(tracer_barres(tranches, "Retard moyen par tranche horaire", "Retard (min)"), width="stretch")
 c4.plotly_chart(mise_en_page(fig_jour, "Retard (min)"), width="stretch")
+
+st.divider()
+st.markdown(
+    """
+**À retenir** (données du 02/10 au 26/11/2026) :
+
+- B et D sont **2 à 3 fois plus en retard** que A, en moyenne comme à Châtelet, et même un jour ordinaire. Le 95e centile atteint environ 13 min contre 7 pour A.
+- **Le retard se crée dans le tunnel**, surtout à sa sortie : B et D y perdent 27 à 41 s par arrêt quand A en rattrape 11.
+- La régulation **coupe les trains** : 2 à 3,5 % des B et D sont limités en parcours, contre 0,2 % des A.
+"""
+)

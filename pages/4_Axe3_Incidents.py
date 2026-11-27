@@ -69,4 +69,15 @@ fig_ep.update_layout(
     legend=dict(orientation="h", y=1.03, x=0),
 )
 st.plotly_chart(fig_ep, width="stretch")
+
+st.divider()
+st.markdown(
+    """
+**À retenir** (données du 02/10 au 26/11/2026) :
+
+- Les 8 plus gros incidents durent **de 2 h à près de 8 h** ; au pire, le nombre de trains dans le tunnel tombe à 15 % de la normale.
+- **6 sur 8 touchent B et D ensemble**, alors que A reste presque toujours sous 5 min. Quelques incidents ne concernent qu'une ligne (ex. incident SNCF du 15/10 sur le D seul).
+- Le 21/10, le nombre de trains est divisé par deux, D dépasse 50 min de retard puis B suit et reste perturbé plus longtemps ; le diagramme de Marey montre les B coupés avant le tunnel.
+"""
+)
 st.caption("Pour rejouer un épisode sur la carte animée, ouvrez **Replay carte** dans le menu de gauche.")
