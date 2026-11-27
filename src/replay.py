@@ -1,9 +1,11 @@
+import datetime
 import math
 import re
 import unicodedata
 from pathlib import Path
 import duckdb
 import pandas as pd
+import plotly.graph_objects as go
 
 # Dossiers et fichiers de données
 RAW_DIR = Path("data/raw")
@@ -42,7 +44,22 @@ APPROCHES_TUNNEL = {
     ("stade de france saint denis", "gare du nord"),
 }
 
-CAPACITE_MAX_TUNNEL = 7  # 3 cantons par voie x 2 sens + zones d'approche = 7 trains max simultanément
+CAPACITE_MAX_TUNNEL = 7
+
+# Paramètres visuels pour la carte
+COULEURS_LIGNES = {"rer_a": "#E3051C", "rer_b": "#5291CE", "rer_d": "#00814F"}
+
+NIVEAUX_RETARD = [
+    ("À l'heure (< 3 min)", "#2ecc71"),
+    ("Retard modéré (3–10 min)", "#f39c12"),
+    ("Retard important (> 10 min)", "#e74c3c"),
+]
+
+MODES_REPLAY = {
+    "Zoom tunnel : 15 min (pas 10s)": {"duree_min": 15, "pas_sec": 10, "frame_ms": 80},
+    "Vue standard : 30 min (pas 30s)": {"duree_min": 30, "pas_sec": 30, "frame_ms": 200},
+}
+
 
 # Faciliter les comparaisons
 def normaliser_nom(nom: str):
@@ -53,12 +70,10 @@ def normaliser_nom(nom: str):
 def construire_trace_lignes():
     """Déroule chaque ligne comme une ficelle graduée (distance cumulée de gare en gare)."""
     # Objectif: points (train) de la carte sur le parcours des lignes et pas ailleurs
-
     df_coords = pd.read_csv(COORDS_CSV)
     df_coords["key"] = df_coords["stop_name"].apply(normaliser_nom)
     df_coords = df_coords.drop_duplicates("key")
 
-    # Dictionnaire rapide : cle_gare -> {"lat": ..., "lon": ...}
     coords_map = {}
     for row in df_coords.to_dict("records"):
         coords_map[row["key"]] = {"lat": row["lat"], "lon": row["lon"]}
@@ -80,12 +95,7 @@ def construire_trace_lignes():
                 prev = points_ligne[-1]
                 dist_cumul += math.hypot(lat - prev["lat"], lon - prev["lon"])
 
-            points_ligne.append({
-                "key": gare,
-                "lat": lat,
-                "lon": lon,
-                "dist": dist_cumul,
-            })
+            points_ligne.append({"key": gare, "lat": lat, "lon": lon, "dist": dist_cumul})
 
         # Index rapide par nom de gare pour retrouver sa distance sur la ligne
         index_gares = {pt["key"]: pt for pt in points_ligne}
@@ -96,8 +106,25 @@ def construire_trace_lignes():
 
     return traces
 
-# Pré-calculé une seule fois au chargement du fichier
 TRACE_LIGNES = construire_trace_lignes()
+
+def categoriser_incident(titre: str):
+    # Classe l'incident à partir de son titre (short_message)
+    msg = str(titre).lower()
+    if "colis suspect" in msg or "bagage abandonné" in msg or "bagage oublié" in msg:
+        return "Colis / bagage abandonné"
+    if "signalisation" in msg or "aiguillage" in msg or "panne d'installation" in msg or "passage à niveau" in msg:
+        return "Panne signalisation / infra"
+    if "malaise" in msg or "accident grave" in msg or "personne sur les voies" in msg or "incident affectant la voie" in msg:
+        return "Incident voyageur / voies"
+    if "panne de train" in msg or "train en panne" in msg or "panne matériel" in msg or "incident technique" in msg:
+        return "Panne de train / technique"
+    if "mouvement social" in msg or "grève" in msg:
+        return "Mouvement social"
+    if "stationnement" in msg or "régulation" in msg or "affluence" in msg:
+        return "Régulation / stationnement"
+    return "Autre perturbation"
+
 
 def charger_incidents_perturbations():
     fichier_incidents = PROCESSED_DIR / "clean_incidents.parquet"
@@ -118,7 +145,8 @@ def charger_incidents_perturbations():
             lignes_a_garder.append(ligne)
 
     df_filtre = pd.DataFrame(lignes_a_garder)
-    df_filtre = df_filtre.sort_values("t_debut", ascending=False)
+    df_filtre = df_filtre.sort_values("t_debut", ascending=False).reset_index(drop=True)
+    df_filtre["categorie"] = df_filtre["short_message"].apply(categoriser_incident)
 
     # Création d'un texte lisible pour chaque incident
     labels = []
@@ -132,6 +160,12 @@ def charger_incidents_perturbations():
 
     df_filtre["label"] = labels
     return df_filtre
+
+def extraire_dates_disponibles(df_incidents: pd.DataFrame):
+    # Récupère les dates triées pour le mode exploration libre
+    if not df_incidents.empty:
+        return sorted(df_incidents["t_debut"].dt.date.unique().tolist(), reverse=True)
+    return [datetime.date.today()]
 
 def charger_journee_corridor(date_str: str):
     # Charger les coordonnées GPS des gares
@@ -261,7 +295,7 @@ def preparer_segments(df_jour: pd.DataFrame):
     return pd.DataFrame(segments)
 
 def position_sur_ligne(ligne: str, gare_dep: str, gare_arr: str, avancement: float, seg: dict):
-    """Place le train le long des gares intermédiaires de la ligne (abscisse curviligne)."""
+    # Place le train le long des gares intermédiaires (evite de couper tout droit dans les virages)
     trace = TRACE_LIGNES.get(ligne)
     if not trace or gare_dep not in trace["index"] or gare_arr not in trace["index"]:
         lat = seg["lat"] + avancement * (seg["lat2"] - seg["lat"])
@@ -367,7 +401,7 @@ def calculer_etat_tunnel(segs_bd: pd.DataFrame, t_now: pd.Timestamp):
         if (dep, arr) in APPROCHES_TUNNEL and seg["retard_min"] > 3:
             nb_trains_retenus += 1
 
-    # Taux d'occupation physique borné à 100 % (7 trains max avec zones d'approche)
+    # Taux d'occupation physique borné à 100 %
     nb_total_tunnel = nb_trains_b + nb_trains_d
     taux_saturation = min(100, int(round((nb_total_tunnel / CAPACITE_MAX_TUNNEL) * 100)))
 
@@ -400,3 +434,181 @@ def calculer_etat_tunnel(segs_bd: pd.DataFrame, t_now: pd.Timestamp):
         "nb_retenus": nb_trains_retenus,
         "txt_trav": texte_traversee,
     }
+
+def construire_annotation(etat_tunnel: dict):
+    # Encadré d'état du tunnel placé en haut à gauche (zone libre sous la légende)
+    texte = (
+        f"<b>TUNNEL CHÂTELET ↔ GARE DU NORD</b><br>"
+        f"État : <b>{etat_tunnel['etat']}</b> — Occupation : <b>{etat_tunnel['sat_pct']} %</b><br>"
+        f"Dans le tube : <b>{etat_tunnel['nb_tube']}/{CAPACITE_MAX_TUNNEL} trains</b> "
+        f"({etat_tunnel['nb_b']} B · {etat_tunnel['nb_d']} D)<br>"
+        f"Retenus aux entrées (>3m) : <b>{etat_tunnel['nb_retenus']} train(s)</b><br>"
+        f"Traversée moy. : <b>{etat_tunnel['txt_trav']}</b> (nominal ~4 min)"
+    )
+    return dict(
+        text=texte,
+        x=0.01, y=0.985, xref="paper", yref="paper",
+        xanchor="left", yanchor="top", align="left",
+        showarrow=False,
+        bgcolor="rgba(255, 255, 255, 0.94)",
+        bordercolor=etat_tunnel["bord"],
+        borderwidth=2,
+        borderpad=8,
+        font=dict(size=12, color="#111111"),
+    )
+
+def construire_carte_replay(
+    df_jour: pd.DataFrame,
+    segs_affichage: pd.DataFrame,
+    segs_bd: pd.DataFrame,
+    lignes_actives: list,
+    t_start: pd.Timestamp,
+    mode_config: dict,
+    t_annonce: pd.Timestamp = None,
+):
+    # Génère la figure Plotly complète avec tracés, gares, trains animés et slider
+    duree_min = mode_config["duree_min"]
+    pas_sec = mode_config["pas_sec"]
+    vitesse_ms = mode_config["frame_ms"]
+
+    fig_map = go.Figure()
+
+    # 1. Tracés géographiques des voies
+    coords_gares = df_jour.drop_duplicates("key").set_index("key")[["lat", "lon"]].to_dict("index")
+    for ligne in lignes_actives:
+        cles_valides = [k for k in PERIMETRE_LIGNES[ligne] if k in coords_gares]
+        fig_map.add_trace(go.Scattermap(
+            lat=[coords_gares[k]["lat"] for k in cles_valides],
+            lon=[coords_gares[k]["lon"] for k in cles_valides],
+            mode="lines",
+            line=dict(width=4, color=COULEURS_LIGNES[ligne]),
+            opacity=0.5,
+            name=ligne.upper().replace("_", " "),
+            hoverinfo="skip",
+        ))
+
+    # 2. Gares du corridor
+    gares_df = df_jour[["stop_name", "lat", "lon"]].drop_duplicates()
+    fig_map.add_trace(go.Scattermap(
+        lat=gares_df["lat"], lon=gares_df["lon"],
+        mode="markers+text",
+        marker=dict(size=6, color="#222222"),
+        text=gares_df["stop_name"],
+        textposition="top right",
+        textfont=dict(size=9, color="#111111"),
+        hoverinfo="text",
+        name="Gares",
+    ))
+
+    # 3. Trains en circulation séparés en 3 traces (une par couleur de retard)
+    nb_traces_fixes = len(lignes_actives) + 1
+    indices_trains = [nb_traces_fixes + i for i in range(len(NIVEAUX_RETARD))]
+
+    pos_0 = interpoler_positions(segs_affichage, t_start)
+    for label_retard, couleur_hex in NIVEAUX_RETARD:
+        sous_pos = pos_0[pos_0["color"] == couleur_hex]
+        fig_map.add_trace(go.Scattermap(
+            lat=sous_pos["lat_now"],
+            lon=sous_pos["lon_now"],
+            mode="markers",
+            marker=dict(size=12, color=couleur_hex),
+            text=sous_pos["hover"],
+            hoverinfo="text",
+            name=label_retard,
+        ))
+
+    # 4. Précalcul des pas de temps
+    nb_etapes = int((duree_min * 60) // pas_sec) + 1
+    frames, slider_steps = [], []
+
+    for step in range(nb_etapes):
+        ecoule_sec = step * pas_sec
+        t_m = t_start + pd.Timedelta(seconds=ecoule_sec)
+        pos_m = interpoler_positions(segs_affichage, t_m)
+        ann_m = construire_annotation(calculer_etat_tunnel(segs_bd, t_m))
+
+        # Afficher le décalage par rapport à l'annonce si on rejoue un incident
+        if t_annonce is not None:
+            delta_annonce = int((t_m - t_annonce).total_seconds() // 60)
+            signe = "+" if delta_annonce >= 0 else ""
+            label_m = f"{t_m.strftime('%H:%M:%S')} ({signe}{delta_annonce}m)"
+        else:
+            label_m = t_m.strftime("%H:%M:%S") if pas_sec < 60 else t_m.strftime("%H:%M")
+
+        data_step = []
+        for _, couleur_hex in NIVEAUX_RETARD:
+            sous_pos = pos_m[pos_m["color"] == couleur_hex]
+            data_step.append(go.Scattermap(
+                lat=sous_pos["lat_now"],
+                lon=sous_pos["lon_now"],
+                marker=dict(size=12, color=couleur_hex),
+                text=sous_pos["hover"],
+            ))
+
+        frames.append(go.Frame(
+            name=f"step_{step}",
+            traces=indices_trains,
+            data=data_step,
+            layout=go.Layout(annotations=[ann_m]),
+        ))
+        slider_steps.append(dict(
+            method="animate",
+            args=[[f"step_{step}"], {"frame": {"duration": 0, "redraw": True}, "mode": "immediate"}],
+            label=label_m,
+        ))
+
+    fig_map.frames = frames
+    fig_map.update_layout(
+        map=dict(style="carto-positron", center=dict(lat=48.865, lon=2.365), zoom=10.4),
+        margin=dict(l=0, r=0, t=42, b=0),
+        height=640,
+        font=dict(color="#111111"),
+        annotations=[construire_annotation(calculer_etat_tunnel(segs_bd, t_start))],
+        legend=dict(
+            orientation="h",
+            y=1.01, yanchor="bottom",
+            x=0.0, xanchor="left",
+            bgcolor="rgba(255,255,255,0.95)",
+            bordercolor="#CCCCCC",
+            borderwidth=1,
+            font=dict(size=11, color="#111111"),
+        ),
+        updatemenus=[dict(
+            type="buttons",
+            showactive=False,
+            x=0.01, y=0.06, xanchor="left", yanchor="bottom",
+            bgcolor="rgba(255,255,255,0.95)",
+            bordercolor="#CCCCCC",
+            borderwidth=1,
+            font=dict(size=12, color="#111111"),
+            buttons=[
+                dict(
+                    label="▶️ Animer",
+                    method="animate",
+                    args=[None, {"frame": {"duration": vitesse_ms, "redraw": True}, "fromcurrent": True, "transition": {"duration": 0}}],
+                ),
+                dict(
+                    label="⏸️ Pause",
+                    method="animate",
+                    args=[[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate"}],
+                ),
+            ],
+        )],
+        sliders=[dict(
+            active=0,
+            x=0.19, len=0.79, y=0.06, yanchor="bottom",
+            bgcolor="rgba(255,255,255,0.94)",
+            bordercolor="#CCCCCC",
+            borderwidth=1,
+            pad={"t": 4, "b": 4, "l": 8, "r": 8},
+            font=dict(size=10, color="#111111"),
+            currentvalue={
+                "prefix": "Heure : ",
+                "visible": True,
+                "xanchor": "right",
+                "font": {"size": 12, "color": "#111111"},
+            },
+            steps=slider_steps,
+        )],
+    )
+    return fig_map
