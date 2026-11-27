@@ -18,8 +18,21 @@ st.write(
     "face au couple `RER B` / `RER D` qui partage le tunnel central."
 )
 
-# Chargement des 4 tables nettoyées
-df_a, df_b, df_d, df_inc = charger_donnees_propres(source="local", maj=False)
+# Chargement des tables en cache pour eviter de recharger a la moindre interaction streamlit
+@st.cache_data
+def charger_donnees_page():
+    df_a, df_b, df_d, df_inc = charger_donnees_propres(source="local", maj=False)
+    nb_trajets = {
+        code: len(pd.read_parquet(FICHIERS_BRUTS[code], columns=["journey_id"])) if FICHIERS_BRUTS[code].exists() else None
+        for code in ("a", "b", "d")
+    }
+    df_brut_b = pd.DataFrame()
+    if FICHIERS_BRUTS["b"].exists():
+        df_brut_b = pd.read_parquet(FICHIERS_BRUTS["b"], columns=["date", "journey_id", "mission", "stops"]).head(2)
+        df_brut_b["stops"] = df_brut_b["stops"].str.slice(0, 260) + "..."
+    return df_a, df_b, df_d, df_inc, nb_trajets, df_brut_b
+
+df_a, df_b, df_d, df_inc, nb_trajets_bruts, df_brut_b = charger_donnees_page()
 
 sources = [
     ("RER A (témoin)", "a", df_a),
@@ -32,7 +45,7 @@ for nom, code, df in sources:
     fichier_brut = FICHIERS_BRUTS[code]
     fichier_propre = PROCESSED_DIR / f"clean_rer_{code}.parquet"
 
-    nb_trajets = len(pd.read_parquet(fichier_brut, columns=["journey_id"])) if fichier_brut.exists() else None
+    nb_trajets = nb_trajets_bruts[code] if fichier_brut.exists() else None
     taille_brut = round(fichier_brut.stat().st_size / (1024 * 1024), 1) if fichier_brut.exists() else None
     taille_propre = round(fichier_propre.stat().st_size / (1024 * 1024), 1) if fichier_propre.exists() else None
 
@@ -96,10 +109,8 @@ st.write(
     "dans la colonne `stops`."
 )
 
-if FICHIERS_BRUTS["b"].exists():
-    df_brut_b = pd.read_parquet(FICHIERS_BRUTS["b"], columns=["date", "journey_id", "mission", "stops"]).head(2)
-    df_brut_b["stops"] = df_brut_b["stops"].str.slice(0, 260) + "..."
-    st.table(df_brut_b) #table et pas dataframe pour afficher toute la colonne stops
+if not df_brut_b.empty:
+    st.table(df_brut_b)  #table et pas dataframe pour afficher toute la colonne stops
 
 st.write("Chaque dictionnaire de la liste `stops` correspond à un arrêt et contient les champs suivants :")
 st.write(
