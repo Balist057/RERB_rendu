@@ -1,35 +1,51 @@
 # Analyse du tunnel commun RER B / RER D
 
-Projet Python pour la data science (ENSAE 2A). L'objectif est de quantifier et visualiser l'effet domino dans le tunnel partagé entre le RER B et le RER D (*Châtelet-Les Halles* - *Gare du Nord*), en utilisant le tronçon central du RER A comme référence (fréquence élevée sans partage de voies).
-
-L'ensemble des résultats (statistiques descriptives, contagion, résilience) et la visualisation interactive des incidents passés seront regroupés dans une application **Streamlit** unique.
+Projet Python pour la data science (ENSAE 2A). L'objectif est de quantifier et visualiser l'effet domino dans le tunnel partagé entre le RER B et le RER D (*Châtelet-Les Halles* - *Gare du Nord*), en prenant le tronçon central du RER A comme référence (fréquence élevée sans partage de voies).
 
 ## Structure du dépôt
 
 - `bot_collect/` : collecteur temps réel sur l'API PRIM (Île-de-France Mobilités), déployé sur SSP Cloud (écriture Parquet sur MinIO S3).
-- `data/raw/` et `data/processed/` : répertoires locaux (ignorés par Git) contenant les snapshots bruts et les Parquet nettoyés ; si absents, `src/nettoyage.py` télécharge automatiquement depuis le bucket S3 public.
-- `src/` : lecture et mise à jour incrémentale S3 (`lecture.py`), pipeline DuckDB de nettoyage (`nettoyage.py`) et analyses statistiques (`Axe1_constat_naif.py`).
+- `data/` : référentiel géographique des gares (`gares_coords.csv`), plus `raw/` et `processed/` (ignorés par Git, régénérés automatiquement depuis le bucket S3 public).
+- `src/` :
+  - `lecture.py` : accès S3 anonyme et mise à jour incrémentale de `data/raw/`.
+  - `nettoyage.py` : pipeline DuckDB de préparation des tronçons centraux (`data/processed/`) et `charger_jour_complet()` pour charger toutes les gares sur une journée.
+  - `Axe1_constat_naif.py` : comparaison macro B/D vs A (retards, Châtelet, entrée/sortie tunnel, tranches horaires, suppressions/limitations, journées noires).
+  - `axe2_contagion.py` : contagion dans le tunnel (corrélations, résidus hors saisonnalité horaire, décalage `.shift()`, sens Nord/Sud, effet domino réciproque B/D vs placebo A, résilience).
+  - `axe3_incidents.py` : détection automatique des principaux incidents passés, extraction des causes officielles, débit vs retard et diagramme de Marey.
+  - `coordonnees_gares.py` : construction de `data/gares_coords.csv` depuis l'open data IDFM.
+  - `replay.py` : préparation des données sur le corridor petite couronne (trains et incidents) pour le replay.
+- `rapport.ipynb` : rapport complet regroupant les données, les 3 axes d'analyse et la conclusion.
 - `notebooks/` : notebooks d'exploration (`axe1.ipynb`, `axe2.ipynb`).
-- `docs/figures/` : graphiques générés localement par `src/Axe1_constat_naif.py` (ignorés par Git).
+- `docs/` : documentation du pipeline (`pipeline_donnees.md`) et figures générées dans `docs/figures/` (ignorées par Git).
 - `app.py` et `pages/` : application Streamlit multi-pages (`1_Dashboard.py`, `2_Visualisations.py`).
+
+## Installation et exécution
+
+```bash
+pip install -r requirements.txt
+python src/Axe1_constat_naif.py
+python src/axe2_contagion.py
+python src/axe3_incidents.py
+```
+
+Si `data/processed/` est vide (après un clone), les scripts téléchargent et nettoient automatiquement les données depuis le bucket S3 public. Pour rafraîchir les données locales avec les derniers jours collectés :
+
+```bash
+python -c "from src.nettoyage import preparer_donnees; preparer_donnees(maj=True)"
+```
 
 ## Déjà réalisé
 
-- **Collecte et stockage (`bot_collect/`)** : collecteur temps réel pour les RER A, B, D et les messages d'incidents, déployé sur SSP Cloud (Docker / Kubernetes) avec stockage Parquet sur S3.
-- **Lecture et nettoyage (`src/lecture.py`, `src/nettoyage.py`)** :
-  - synchronisation incrémentale S3 (`update_all()`) vers les fichiers fixes `data/raw/{nom}.parquet` et chargement DuckDB en mode `local` ou `s3` (fallback automatique sur S3 si les fichiers locaux sont absents) ;
-  - isolation des tronçons centraux (RER A : *Charles De Gaulle-Étoile* à *Nation* ; RER B : *Denfert-Rochereau* à *Aulnay-sous-Bois* ; RER D : *Gare de Lyon* à *Saint-Denis*), uniformisation de `Châtelet-Les Halles` et tri chronologique UTC vers `Europe/Paris` ;
-  - filtrage des retards aberrants (`[-15, 180]` min), création des variables (`retard_min`, `est_supprime`, `zone_tunnel`, `heure_pointe`, `tranche_horaire`) et export dans `data/processed/clean_*.parquet`.
-- **Analyses Axe 1 et Axe 2 (`src/Axe1_constat_naif.py`, `notebooks/axe1.ipynb`, `notebooks/axe2.ipynb`)** :
-  - comparaison macro B/D vs A (moyenne, médiane, P90/P95 hors suppressions), comparaison à *Châtelet-Les Halles*, retard ajouté dans le tunnel selon le sens, écart pointe / heures creuses et taux de suppression / limitation (`src/Axe1_constat_naif.py` génère 4 graphiques dans `docs/figures/` et un tableau récapitulatif) ;
-  - exploration de la contagion dans le tunnel (`axe2.ipynb` : corrélation par fenêtres de 15 min, décalage `.shift()`, test placebo RER A à Châtelet et temps de retour sous 3 min après un pic).
+- **Collecte et pipeline de données** (`bot_collect/`, `src/lecture.py`, `src/nettoyage.py`, `docs/pipeline_donnees.md`) : collecte continue SSP Cloud, synchronisation incrémentale S3, filtrage des tronçons centraux et des retards aberrants (`[-15, 180]` min), création des variables d'analyse et fonction `charger_jour_complet()` toutes gares.
+- **Analyses complètes (Axes 1, 2 et 3)** (`src/Axe1_constat_naif.py`, `src/axe2_contagion.py`, `src/axe3_incidents.py`, `rapport.ipynb`) :
+  - Axe 1 : retards moyens et P95, contrôle à *Châtelet-Les Halles*, retard ajouté entrée vs sortie de tunnel et par tranche horaire, suppressions/limitations, 8 journées noires sur B et D (0 sur A).
+  - Axe 2 : corrélation B/D à Châtelet (brute et sur résidus hors effet d'heure : `0,22` vs `0,02` sur A), décalage maximal à `+15 min`, asymétrie Sud/Nord, contagion réciproque B/D vs placebo A, temps de retour sous 3 min.
+  - Axe 3 : détection automatique des principaux incidents passés, association aux causes officielles, suivi débit vs retard et diagramme de Marey.
+- **Préparation du replay** (`src/coordonnees_gares.py`, `data/gares_coords.csv`, `src/replay.py`) : coordonnées GPS des gares et extraction optimisée des trajets/incidents sur le corridor petite couronne.
 
 ## Reste à faire
 
-- **Compléter `src/` (Axes 2 et 3)** : passer l'Axe 2 (contagion B/D, lag `.shift()`, résilience) en `.py` et ajouter la détection automatique des principaux incidents passés croisée avec `clean_incidents`.
-- **Visualisations et application Streamlit (`app.py`, `pages/`)** :
-  - intégrer les résultats d'analyse dans `pages/1_Dashboard.py` et `pages/2_Visualisations.py` ;
-  - construire la carte interactive (carte géographique de Paris + schéma topologique en « H » couché avec le RER A séparé) permettant de rejouer les incidents passés minute par minute, avec un diagramme de Marey et les messages d'incidents.
-- **Soutenance (`soutenance/`)** : préparer les slides LaTeX.
+- **Interface Streamlit (`app.py`, `pages/1_Dashboard.py`, `pages/2_Visualisations.py`)** : connecter les graphiques des 3 axes et le replay interactif basé sur `src/replay.py` (carte géographique / schéma topologique et diagramme de Marey).
+- **Soutenance** : préparer les slides LaTeX.
 
 Rscript -e "tinytex::pdflatex('mon_fichier.tex')" pour compiler le fichier .tex (avec R ds le PATH)
